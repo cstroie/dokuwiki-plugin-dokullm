@@ -98,7 +98,8 @@
         // Create toolbar container
         const toolbar = document.createElement('div');
         toolbar.id = 'dokullm-toolbar';
-        toolbar.className = 'toolbar';
+        toolbar.className = 'toolbar btn-group';
+        toolbar.role = 'toolbar';
         
         // Get metadata to check if template exists
         const metadata = getMetadata();
@@ -109,7 +110,7 @@
             console.log('DokuLLM: Adding insert template button for', metadata.template);
             const templateBtn = document.createElement('button');
             templateBtn.type = 'button';
-            templateBtn.className = 'toolbutton';
+            templateBtn.className = 'toolbutton btn btn-default';
             templateBtn.textContent = lang.insert_template || 'Insert Template';
             templateBtn.addEventListener('click', () => insertTemplateContent(metadata.template));
             toolbar.appendChild(templateBtn);
@@ -121,7 +122,7 @@
                 console.log('DokuLLM: Adding find template button');
                 const findTemplateBtn = document.createElement('button');
                 findTemplateBtn.type = 'button';
-                findTemplateBtn.className = 'toolbutton';
+                findTemplateBtn.className = 'toolbutton btn btn-default';
                 findTemplateBtn.textContent = lang.find_template || 'Find Template';
                 findTemplateBtn.addEventListener('click', findTemplate);
                 toolbar.appendChild(findTemplateBtn);
@@ -157,7 +158,7 @@
         
         const sendButton = document.createElement('button');
         sendButton.type = 'button';
-        sendButton.className = 'toolbutton';
+        sendButton.className = 'toolbutton btn btn-default';
         sendButton.textContent = lang.send || 'Send';
         sendButton.addEventListener('click', () => processCustomPrompt(promptInput.value));
         
@@ -166,7 +167,7 @@
         
         // Insert custom prompt container after the editor
         editor.parentNode.insertBefore(customPromptContainer, editor.nextSibling);
-        
+
         // Fetch action definitions from the API
         getActions()
             .then(actions => {
@@ -180,7 +181,7 @@
                 actions.forEach(action => {
                     const btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.className = 'toolbutton';
+                    btn.className = 'toolbutton btn btn-default';
                     btn.textContent = action.label;
                     btn.title = action.description || '';
                     btn.dataset.action = action.id;
