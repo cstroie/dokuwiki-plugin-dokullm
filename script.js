@@ -35,8 +35,9 @@
      */
     document.addEventListener('DOMContentLoaded', function() {
         console.log('DokuLLM: DOM loaded, initializing plugin');
-        // Only run on edit pages
-        if (document.getElementById('wiki__text')) {
+        // Only run on edit pages and only for authenticated users
+        // Check if user is authenticated by looking for edit form elements
+        if (document.getElementById('wiki__text') && document.querySelector('form#dw__editform')) {
             // Add DokuLLM tools to the editor
             console.log('DokuLLM: Adding DokuLLM tools to editor');
             addDokuLLMTools();
