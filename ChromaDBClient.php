@@ -49,7 +49,7 @@ class ChromaDBClient {
         
         // Ensure ollamaModel is a string with a default fallback
         if (!is_string($ollamaModel) || empty($ollamaModel)) {
-            $this->ollamaModel = 'nomic-embed-text'; // Default embedding model
+            $this->ollamaModel = 'embeddinggemma:300m'; // Default embedding model
         } else {
             $this->ollamaModel = $ollamaModel;
         }
