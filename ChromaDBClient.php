@@ -789,19 +789,42 @@ function parseFilePath($filePath) {
         // Fallback to common DokuWiki installation path
         $pagesDir = '/var/www/html/dokuwiki/data/pages/';
     }
-    // Remove the base path
-    $relativePath = str_replace($pagesDir, '', $filePath);
+    
+    // Remove the base path - try multiple approaches to handle different paths
+    $relativePath = $filePath;
+    
+    // Try to remove the pages directory path if it exists in the file path
+    if (strpos($filePath, $pagesDir) !== false) {
+        $relativePath = str_replace($pagesDir, '', $filePath);
+    } else {
+        // If the standard pages directory path is not found, try to find the 'pages' directory
+        // and extract everything after it
+        $pagesPos = strpos($filePath, '/pages/');
+        if ($pagesPos !== false) {
+            $relativePath = substr($filePath, $pagesPos + 7); // +7 to skip '/pages/'
+        } else {
+            // Last resort: try to find the last occurrence of 'pages' in the path
+            $pagesPos = strrpos($filePath, 'pages/');
+            if ($pagesPos !== false) {
+                $relativePath = substr($filePath, $pagesPos + 6); // +6 to skip 'pages/'
+            }
+        }
+    }
+    
     // Remove .txt extension
     $relativePath = preg_replace('/\.txt$/', '', $relativePath);
+    
     // Split path into parts and filter out empty parts
     $parts = array_filter(explode('/', $relativePath));
-    // Build DokuWiki ID (use first part as namespace)
+    
+    // Build DokuWiki ID
     $idParts = [];
     foreach ($parts as $part) {
         if (!empty($part)) {
             $idParts[] = $part;
         }
     }
-    // Reurn the ID
+    
+    // Return the ID
     return implode(':', $idParts);
 }
