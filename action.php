@@ -57,8 +57,36 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         $controller->register_hook('COMMON_PAGETPL_LOAD', 'BEFORE', $this, 'handleTemplate');
         $controller->register_hook('MENU_ITEMS_ASSEMBLY', 'AFTER', $this, 'addCopyPageButton', array());
         $controller->register_hook('INDEXER_TASKS_RUN', 'AFTER', $this, 'handlePageSave');
+        //$controller->register_hook('TOOLBAR_DEFINE', 'AFTER', $this, 'handleToolbar', array ());
     }
 
+    /**                                                                                                                
+     * Inserts the DokuLLM actions as toolbar buttons                                                                  
+     */                                                                                                                
+    private function handleToolbar(Doku_Event $event, $param) {                                                        
+        // Get the LLM actions from the profile                                                                        
+        $actions = $this->getActions();                                                                                
+                                                                                                                       
+        // Build the toolbar list                                                                                      
+        $toolbarList = [];                                                                                             
+        foreach ($actions as $action) {                                                                                
+            $toolbarList[] = [                                                                                         
+                'type' => 'format',                                                                                    
+                'title' => $action['label'],                                                                           
+                'icon' => $action['icon'] ? '../../plugins/dokullm/images/' . $action['icon'] :                        
+'../../plugins/dokullm/images/copy.svg',                                                                               
+                'open' => 'dokullm:' . $action['id']                                                                   
+            ];                                                                                                         
+        }                                                                                                              
+                                                                                                                       
+        // Add the picker with all actions                                                                             
+        $event->data[] = array (                                                                                       
+            'type' => 'picker',                                                                                        
+            'title' => $this->getLang('DokuLLM actions'),                                                              
+            'icon' => '../../plugins/dokullm/images/copy.svg',                                                         
+            'list' => $toolbarList                                                                                     
+        );                                                                                                             
+    }                                                                                                                  
 
     /**
      * Insert metadata line after the first title in DokuWiki format
