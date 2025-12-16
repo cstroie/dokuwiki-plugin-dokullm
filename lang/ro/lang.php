@@ -53,6 +53,9 @@ $lang['js']['no_text_provided']         = 'Vă rugăm să selectaţi text sau s�
 $lang['js']['template_found']           = 'Șablon găsit şi inserat: ';
 $lang['js']['no_template_found']        = 'Nu a fost găsit niciun şablon potrivit pentru acest conţinut.';
 $lang['js']['loading_template']         = 'Se încarcă şablonul...';
+$lang['js']['custom_result']            = 'Rezultatul solicitării personalizate';
+$lang['js']['differences']              = 'Diferențe';
+$lang['js']['prompt_action_title']      = 'Selectați acțiunea pentru rezultatul solicitării';
 
 $lang['template_not_found']     = 'Şablonul nu a fost găsit: ';
 $lang['no_text_provided']       = 'Niciun text furnizat';
