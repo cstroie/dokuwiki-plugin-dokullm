@@ -144,11 +144,13 @@
         const customPromptContainer = document.createElement('div');
         customPromptContainer.className = 'dokullm-custom-prompt';
         customPromptContainer.id = 'dokullm-custom-prompt';
+        customPromptContainer.style.cssText = 'display: flex; gap: 5px; align-items: center; margin-top: 10px;';
         
         const promptInput = document.createElement('input');
         promptInput.type = 'text';
         promptInput.placeholder = lang.custom_prompt_placeholder || 'Enter your prompt...';
         promptInput.className = 'dokullm-prompt-input';
+        promptInput.style.cssText = 'flex: 1; height: 34px; padding: 6px 12px; font-size: 14px; line-height: 1.42857143; border: 1px solid #ccc; border-radius: 4px;';
         
         // Add event listener for Enter key
         promptInput.addEventListener('keypress', function(e) {
@@ -161,6 +163,7 @@
         const actionSelect = document.createElement('select');
         actionSelect.className = 'dokullm-prompt-action';
         actionSelect.title = lang.prompt_action_title || 'Select action for prompt result';
+        actionSelect.style.cssText = 'height: 34px; padding: 6px 12px; font-size: 14px; line-height: 1.42857143; border: 1px solid #ccc; border-radius: 4px;';
         
         // Add options to the dropdown
         const appendOption = document.createElement('option');
@@ -189,6 +192,7 @@
         sendButton.className = 'toolbutton btn btn-default';
         sendButton.textContent = lang.send || 'Send';
         sendButton.addEventListener('click', () => processCustomPromptWithAction(promptInput.value, actionSelect.value));
+        sendButton.style.cssText = 'height: 34px; padding: 6px 12px; font-size: 14px; line-height: 1.42857143;';
         
         customPromptContainer.appendChild(promptInput);
         customPromptContainer.appendChild(actionSelect);
