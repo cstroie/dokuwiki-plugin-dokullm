@@ -157,13 +157,41 @@
             }
         });
         
+        // Create dropdown for custom prompt actions
+        const actionSelect = document.createElement('select');
+        actionSelect.className = 'dokullm-prompt-action';
+        actionSelect.title = lang.prompt_action_title || 'Select action for prompt result';
+        
+        // Add options to the dropdown
+        const appendOption = document.createElement('option');
+        appendOption.value = 'append';
+        appendOption.textContent = lang.append || 'Append';
+        actionSelect.appendChild(appendOption);
+        
+        const showOption = document.createElement('option');
+        showOption.value = 'show';
+        showOption.textContent = lang.show || 'Show';
+        actionSelect.appendChild(showOption);
+        
+        const replaceOption = document.createElement('option');
+        replaceOption.value = 'replace';
+        replaceOption.textContent = lang.replace || 'Replace';
+        replaceOption.selected = true; // Default action
+        actionSelect.appendChild(replaceOption);
+        
+        const insertOption = document.createElement('option');
+        insertOption.value = 'insert';
+        insertOption.textContent = lang.insert || 'Insert';
+        actionSelect.appendChild(insertOption);
+        
         const sendButton = document.createElement('button');
         sendButton.type = 'button';
         sendButton.className = 'toolbutton btn btn-default';
         sendButton.textContent = lang.send || 'Send';
-        sendButton.addEventListener('click', () => processCustomPrompt(promptInput.value));
+        sendButton.addEventListener('click', () => processCustomPromptWithAction(promptInput.value, actionSelect.value));
         
         customPromptContainer.appendChild(promptInput);
+        customPromptContainer.appendChild(actionSelect);
         customPromptContainer.appendChild(sendButton);
         
         // Insert custom prompt container after the editor
@@ -649,7 +677,24 @@
      * @param {string} customPrompt - The user's custom prompt
      */
     function processCustomPrompt(customPrompt) {
-        console.log('DokuLLM: Processing custom prompt:', customPrompt);
+        // Default to replace action for backward compatibility
+        processCustomPromptWithAction(customPrompt, 'replace');
+    }
+    
+    /**
+     * Process text with a custom user prompt and specified action
+     * 
+     * Sends selected or full text content to the backend with a user-provided
+     * custom prompt for processing, and handles the result according to the specified action.
+     * 
+     * Clears the prompt input after successful processing.
+     * Shows loading indicators during processing.
+     * 
+     * @param {string} customPrompt - The user's custom prompt
+     * @param {string} action - The action to perform with the result (append, show, replace, insert)
+     */
+    function processCustomPromptWithAction(customPrompt, action) {
+        console.log('DokuLLM: Processing custom prompt:', customPrompt, 'with action:', action);
         if (!customPrompt.trim()) {
             console.log('DokuLLM: No custom prompt provided');
             alert(lang.no_prompt_provided || 'Please enter a prompt');
@@ -732,15 +777,44 @@
             console.log('DokuLLM: Custom prompt processing successful, result length:', data.result.length);
             // Remove some part
             const [thinkingContent, cleanedResult] = removeBetweenXmlTags(data.result, 'think');
-            // Replace selected text or append to editor
-            if (selectedText) {
-                console.log('DokuLLM: Replacing selected text for custom prompt');
-                replaceSelectedText(editor, cleanedResult);
-            } else {
-                console.log('DokuLLM: Replacing full text content for custom prompt');
-                // Preserve metadata when doing full page update
-                const metadata = extractMetadata(editor.value);
-                editor.value = metadata + cleanedResult;
+            
+            // Handle result based on the specified action
+            switch (action) {
+                case 'show':
+                    console.log('DokuLLM: Showing result in modal for custom prompt');
+                    showModal(cleanedResult, 'custom', lang.custom_result || 'Custom Prompt Result');
+                    break;
+                    
+                case 'append':
+                    console.log('DokuLLM: Appending result to existing text for custom prompt');
+                    // Append to the end of existing content (preserving metadata)
+                    const metadata = extractMetadata(editor.value);
+                    const contentWithoutMetadata = editor.value.substring(metadata.length);
+                    editor.value = metadata + contentWithoutMetadata + '\n\n' + cleanedResult;
+                    break;
+                    
+                case 'insert':
+                    console.log('DokuLLM: Inserting result before existing text for custom prompt');
+                    // Insert before existing content (preserving metadata)
+                    const metadataInsert = extractMetadata(editor.value);
+                    const contentWithoutMetadataInsert = editor.value.substring(metadataInsert.length);
+                    const newContent = cleanedResult + '\n\n' + contentWithoutMetadataInsert;
+                    editor.value = insertMetadataAfterTitle(newContent, metadataInsert.trim());
+                    break;
+                    
+                case 'replace':
+                default:
+                    // Replace selected text or append to editor
+                    if (selectedText) {
+                        console.log('DokuLLM: Replacing selected text for custom prompt');
+                        replaceSelectedText(editor, cleanedResult);
+                    } else {
+                        console.log('DokuLLM: Replacing full text content for custom prompt');
+                        // Preserve metadata when doing full page update
+                        const metadata = extractMetadata(editor.value);
+                        editor.value = metadata + cleanedResult;
+                    }
+                    break;
             }
             
             // Clear the input field
