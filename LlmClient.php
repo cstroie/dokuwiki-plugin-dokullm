@@ -620,7 +620,7 @@ class LlmClient
         // Check if there's a command-specific system prompt appendage
         if (!empty($action)) {
             try {
-                $commandSystemPrompt = $this->loadPrompt($action . ':system', $variables);
+                $commandSystemPrompt = $this->loadPrompt('system:' . $action, $variables);
                 if ($commandSystemPrompt !== false) {
                     $systemPrompt .= "\n" . $commandSystemPrompt;
                 }
