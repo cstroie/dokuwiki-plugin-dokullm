@@ -404,7 +404,8 @@
                 // Insert before existing content (preserving metadata)
                 const metadata = extractMetadata(editor.value);
                 const contentWithoutMetadata = editor.value.substring(metadata.length);
-                editor.value = metadata + cleanedResult + '\n\n' + contentWithoutMetadata;
+                const newContent = cleanedResult + '\n\n' + contentWithoutMetadata;
+                editor.value = insertMetadataAfterTitle(newContent, metadata.trim());
                 // Show thinking content in modal if it exists and thinking is enabled
                 if (thinkingContent) {
                     showModal(thinkingContent, 'thinking', lang.thinking_process || 'AI Thinking Process');
