@@ -140,7 +140,7 @@ $conf['think'] = false;
  * 
  * @var bool
  */
-$conf['use_tools'] = false;
+$conf['tools'] = false;
 
 /**
  * Enable ChromaDB integration
