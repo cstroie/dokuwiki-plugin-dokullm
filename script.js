@@ -567,7 +567,7 @@
         });
         
         // Create title based on action or use provided title
-        const title = document.createElement('h3');
+        const title = document.createElement('h2');
         if (titleText) {
             title.textContent = titleText;
         } else {
@@ -580,7 +580,7 @@
         content.innerHTML = convertToHtml(contentText);
         content.style.cssText = `
             margin-top: 20px;
-            white-space: pre-wrap;
+            white-space: normal;
         `;
         
         // Assemble modal
