@@ -211,13 +211,22 @@
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'toolbutton btn btn-default';
-                    btn.textContent = action.label;
                     btn.title = action.description || '';
                     btn.dataset.action = action.id;
                     btn.dataset.result = action.result;
                     btn.addEventListener('click', function(event) {
                         processDokuLLMAction(action.id, event);
                     });
+                    
+                    // Check if icon is a unicode emoji
+                    if (action.icon && /[\p{Emoji}]/u.test(action.icon)) {
+                        // If it's an emoji, display both emoji and label
+                        btn.innerHTML = `<span class="dokullm-emoji-icon">${action.icon}</span> ${action.label}`;
+                    } else {
+                        // If not an emoji, display only the label
+                        btn.textContent = action.label;
+                    }
+                    
                     toolbar.appendChild(btn);
                 });
                 
