@@ -112,7 +112,7 @@
             const templateBtn = document.createElement('button');
             templateBtn.type = 'button';
             templateBtn.className = 'toolbutton btn btn-default';
-            templateBtn.textContent = lang.insert_template || 'Insert Template';
+            templateBtn.innerHTML = '<span class="dokullm-emoji-icon">📎</span> ' + (lang.insert_template || 'Insert Template');
             templateBtn.addEventListener('click', () => insertTemplateContent(metadata.template));
             toolbar.appendChild(templateBtn);
         } else {
@@ -124,7 +124,7 @@
                 const findTemplateBtn = document.createElement('button');
                 findTemplateBtn.type = 'button';
                 findTemplateBtn.className = 'toolbutton btn btn-default';
-                findTemplateBtn.textContent = lang.find_template || 'Find Template';
+                findTemplateBtn.innerHTML = '<span class="dokullm-emoji-icon">🔍</span> ' + (lang.find_template || 'Find Template');
                 findTemplateBtn.addEventListener('click', findTemplate);
                 toolbar.appendChild(findTemplateBtn);
             }
