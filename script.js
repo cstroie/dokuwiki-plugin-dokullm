@@ -222,8 +222,11 @@
                     if (action.icon && /[\p{Emoji}]/u.test(action.icon)) {
                         // If it's an emoji, display both emoji and label
                         btn.innerHTML = `<span class="dokullm-emoji-icon">${action.icon}</span> ${action.label}`;
+                    } else if (action.icon) {
+                        // If it's an icon file name, display icon image and label
+                        btn.innerHTML = `<img src="/dokuwiki/lib/images/${action.icon}" alt="${action.label}" class="dokullm-icon"> ${action.label}`;
                     } else {
-                        // If not an emoji, display only the label
+                        // If no icon, display only the label
                         btn.textContent = action.label;
                     }
                     
