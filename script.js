@@ -224,7 +224,9 @@
                         btn.innerHTML = `<span class="dokullm-emoji-icon">${action.icon}</span> ${action.label}`;
                     } else if (action.icon) {
                         // If it's an icon file name, display icon image and label
-                        btn.innerHTML = `<img src="/dokuwiki/lib/images/${action.icon}" alt="${action.label}" class="dokullm-icon"> ${action.label}`;
+                        // Extract base URL from current page URL
+                        const baseUrl = window.location.origin + DOKU_BASE;
+                        btn.innerHTML = `<img src="${baseUrl}lib/images/${action.icon}" alt="${action.label}" class="dokullm-icon"> ${action.label}`;
                     } else {
                         // If no icon, display only the label
                         btn.textContent = action.label;
