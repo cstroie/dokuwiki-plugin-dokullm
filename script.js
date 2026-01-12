@@ -714,6 +714,9 @@
             alert(lang.no_prompt_provided || 'Please enter a prompt');
             return;
         }
+    
+        // Store the custom prompt to repopulate after processing
+        const storedCustomPrompt = customPrompt;
         
         const editor = document.getElementById('wiki__text');
         if (!editor) {
@@ -831,10 +834,10 @@
                     break;
             }
             
-            // Clear the input field
+            // Repopulate the input field with the original prompt
             const promptInput = toolbar.querySelector('.dokullm-prompt-input');
             if (promptInput) {
-                promptInput.value = '';
+                promptInput.value = storedCustomPrompt;
             }
             // Show thinking content in modal if it exists and thinking is enabled
             if (thinkingContent) {
