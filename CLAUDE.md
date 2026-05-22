@@ -184,20 +184,17 @@ Loop protection:
 
 ### Bugs
 
-1. **`LlmClient.php:881–882`** — Dead code and undefined variable:
-   ```php
-   $chromaCollection = 'reports';
-   $pageId = $pageId;  // FIXME: $pageId is not defined in this scope
-   ```
-   `getChromaDBClient()` has a hardcoded `'reports'` fallback that is never actually used (overwritten by the if-block below it).
+All previously identified bugs have been fixed:
 
-2. ~~**Config key mismatch**~~ — Fixed: `$meta['use_tools']` renamed to `$meta['tools']` to match the actual config key; `lang/en/settings.php` and `lang/ro/settings.php` updated accordingly.
+1. ~~**`LlmClient.php` — Dead code in `getChromaDBClient()`**~~ — Fixed: removed `$chromaCollection = 'reports'; $pageId = $pageId;`, default collection changed to `'documents'`.
 
-3. **`cli.php:71`** — Calls `$this->getConf('ollama_model')` but the config key is `ollama_embeddings_model`. The CLI `query`, `heartbeat`, etc. commands will fail to read the correct Ollama model.
+2. ~~**Config key mismatch**~~ — Fixed: `$meta['use_tools']` renamed to `$meta['tools']`; lang files updated.
 
-4. **Fallback profile path typo** — `LlmClient.php:537` falls back to `dokullm:profile:default:{ACTION}` (singular `profile`) instead of `dokullm:profiles:default:{ACTION}` (plural). The fallback will always fail silently.
+3. ~~**`cli.php` — Wrong config key**~~ — Fixed: `getConf('ollama_model')` → `getConf('ollama_embeddings_model')`.
 
-5. **`action.php:291`** — `$ID` (global DokuWiki page ID) is passed to `LlmClient` constructor but is not declared `global` in `processRequest()`. PHP will use an undefined variable; the page ID will be `null`.
+4. ~~**Fallback profile path typo**~~ — Fixed: `dokullm:profile:default` → `dokullm:profiles:default` in `loadPrompt()`.
+
+5. ~~**Missing `global $ID` in `processRequest()`**~~ — Fixed: added `global $INPUT, $ID;`.
 
 ### Disabled Code
 
