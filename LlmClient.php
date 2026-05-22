@@ -31,8 +31,20 @@ if (!defined('DOKU_INC')) {
  */
 class LlmClient
 {
-    /** @var string The API endpoint URL */
-    private $api_url;
+    /** @var string OpenAI-compatible API endpoint URL */
+    private $openai_api_url;
+
+    /** @var string OpenAI API key (Bearer token) */
+    private $openai_api_key;
+
+    /** @var string OpenAI model identifier */
+    private $openai_model;
+
+    /** @var string Anthropic API key (x-api-key header) */
+    private $anthropic_api_key;
+
+    /** @var string Anthropic model identifier */
+    private $anthropic_model;
 
     /** @var array Cache for tool call results */
     private $toolCallCache = [];
@@ -42,12 +54,6 @@ class LlmClient
 
     /** @var array Track tool call counts to prevent infinite loops */
     private $toolCallCounts = [];
-
-    /** @var string The API authentication key */
-    private $api_key;
-
-    /** @var string The model identifier to use */
-    private $model;
 
     /** @var int The request timeout in seconds */
     private $timeout;
@@ -83,9 +89,11 @@ class LlmClient
      * for API URL, key, model, timeout, and LLM sampling parameters.
      *
      * Configuration values:
-     * - api_url: The LLM API endpoint URL
-     * - api_key: Authentication key for the API (optional)
-     * - model: The model identifier to use for requests
+     * - openai_api_url: OpenAI-compatible API endpoint URL
+     * - openai_api_key: Bearer token for the OpenAI path (optional)
+     * - openai_model: Model identifier for the OpenAI path
+     * - anthropic_api_key: x-api-key for the Anthropic path
+     * - anthropic_model: Model identifier for the Anthropic path
      * - timeout: Request timeout in seconds
      * - profile: Profile for prompt templates
      * - temperature: Temperature setting for response randomness (0.0-1.0)
@@ -96,11 +104,13 @@ class LlmClient
      * - chromaClient: ChromaDB client instance (optional)
      * - pageId: Page ID (optional)
      */
-    public function __construct($api_url = null, $api_key = null, $model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $provider = 'openai', $profile = null, $chromaClient = null, $pageId = null)
+    public function __construct($openai_api_url = null, $openai_api_key = null, $openai_model = null, $anthropic_api_key = null, $anthropic_model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $provider = 'openai', $profile = null, $chromaClient = null, $pageId = null)
     {
-        $this->api_url = $api_url;
-        $this->api_key = $api_key;
-        $this->model = $model;
+        $this->openai_api_url    = $openai_api_url;
+        $this->openai_api_key    = $openai_api_key;
+        $this->openai_model      = $openai_model;
+        $this->anthropic_api_key = $anthropic_api_key;
+        $this->anthropic_model   = $anthropic_model;
         $this->timeout = $timeout;
         $this->temperature = $temperature;
         $this->top_p = $top_p;
@@ -272,7 +282,7 @@ class LlmClient
 
         // Prepare API request data with model parameters
         $data = [
-            'model' => $this->model,
+            'model' => $this->openai_model,
             'messages' => [
                 ['role' => 'system', 'content' => $systemPrompt],
                 ['role' => 'user', 'content' => $prompt]
@@ -340,8 +350,8 @@ class LlmClient
             'Content-Type: application/json'
         ];
 
-        if (!empty($this->api_key)) {
-            $headers[] = 'Authorization: Bearer ' . $this->api_key;
+        if (!empty($this->openai_api_key)) {
+            $headers[] = 'Authorization: Bearer ' . $this->openai_api_key;
         }
 
        // If tools have already been called, remove tools and tool_choice from data to prevent infinite loops
@@ -352,7 +362,7 @@ class LlmClient
 
         // Initialize and configure cURL for the API request
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $this->api_url);
+        curl_setopt($ch, CURLOPT_URL, $this->openai_api_url);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
@@ -458,7 +468,7 @@ class LlmClient
     private function callAnthropicAPI($systemPrompt, $prompt, $useTools = false)
     {
         $data = [
-            'model'      => $this->model,
+            'model'      => $this->anthropic_model,
             'max_tokens' => 6144,
             'system'     => $systemPrompt,
             'messages'   => [
@@ -537,7 +547,7 @@ class LlmClient
     {
         $headers = [
             'Content-Type: application/json',
-            'x-api-key: ' . $this->api_key,
+            'x-api-key: ' . $this->anthropic_api_key,
             'anthropic-version: 2023-06-01',
         ];
 

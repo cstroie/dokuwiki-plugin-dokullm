@@ -4,10 +4,12 @@
  *
  */
 
-$lang['provider'] = 'LLM Provider (openai = any OpenAI-compatible API; anthropic = Anthropic native API)';
-$lang['api_url'] = 'LLM API Endpoint URL (not used when provider is set to anthropic)';
-$lang['api_key'] = 'API Key for authentication with the LLM service';
-$lang['model'] = 'Model name to use for text processing';
+$lang['provider']          = 'LLM Provider';
+$lang['openai_api_url']    = 'OpenAI API Endpoint URL (any OpenAI-compatible API)';
+$lang['openai_api_key']    = 'OpenAI API Key';
+$lang['openai_model']      = 'OpenAI Model Name';
+$lang['anthropic_api_key'] = 'Anthropic API Key';
+$lang['anthropic_model']   = 'Anthropic Model Name';
 $lang['timeout'] = 'Request Timeout (seconds)';
 $lang['profile'] = 'Prompt Profile';
 $lang['temperature'] = 'Temperature (0.0-1.0) - Lower values make output more focused';

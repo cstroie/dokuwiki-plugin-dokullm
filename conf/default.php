@@ -11,42 +11,61 @@
  *
  * Selects the API provider. 'openai' works with any OpenAI-compatible endpoint
  * (OpenAI, Ollama, LM Studio, etc.). 'anthropic' uses Anthropic's native Messages
- * API directly; in this case api_url is ignored.
+ * API directly; in this case openai_api_url is ignored.
  *
  * @var string
  */
 $conf['provider'] = 'openai';
 
 /**
- * The API endpoint URL for the LLM service
+ * OpenAI API endpoint URL
  *
- * This should be the full URL to the chat completions endpoint of your LLM provider.
- * The default is set to OpenAI's GPT API endpoint.
+ * Full URL to the chat completions endpoint. Works with any OpenAI-compatible
+ * API (OpenAI, Ollama, LM Studio, LocalAI, etc.).
  * Not used when provider is 'anthropic'.
  *
  * @var string
  */
-$conf['api_url'] = 'https://api.openai.com/v1/chat/completions';
+$conf['openai_api_url'] = 'https://api.openai.com/v1/chat/completions';
 
 /**
- * The API authentication key
- * 
- * This is the secret key used to authenticate with the LLM service.
- * For security, this should be left empty in the default config and set by the user.
- * 
+ * OpenAI API key
+ *
+ * Bearer token for authenticating with OpenAI or compatible APIs.
+ * Leave empty for local endpoints that require no authentication.
+ *
  * @var string
  */
-$conf['api_key'] = '';
+$conf['openai_api_key'] = '';
 
 /**
- * The model identifier to use for text processing
- * 
- * Specifies which LLM model to use for processing requests.
- * The default is gpt-3.5-turbo, but can be changed to other models like gpt-4.
- * 
+ * OpenAI model identifier
+ *
+ * Model name sent to the OpenAI-compatible API.
+ *
  * @var string
  */
-$conf['model'] = 'gpt-3.5-turbo';
+$conf['openai_model'] = 'gpt-4o-mini';
+
+/**
+ * Anthropic API key
+ *
+ * API key for authenticating with Anthropic's Messages API.
+ * Sent as the x-api-key header. Only used when provider is 'anthropic'.
+ *
+ * @var string
+ */
+$conf['anthropic_api_key'] = '';
+
+/**
+ * Anthropic model identifier
+ *
+ * Model name sent to the Anthropic Messages API.
+ * Only used when provider is 'anthropic'.
+ *
+ * @var string
+ */
+$conf['anthropic_model'] = 'claude-sonnet-4-6';
 
 /**
  * The request timeout in seconds

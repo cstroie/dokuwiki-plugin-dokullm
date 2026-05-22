@@ -25,8 +25,11 @@ if (!defined('DOKU_INC')) {
  * operations directly within the DokuWiki editor.
  *
  * Configuration options:
- * - api_url: The LLM API endpoint URL
- * - api_key: Authentication key for the API (optional)
+ * - openai_api_url: OpenAI-compatible API endpoint URL
+ * - openai_api_key: Bearer token (optional)
+ * - openai_model: Model identifier for the OpenAI path
+ * - anthropic_api_key: x-api-key for the Anthropic path
+ * - anthropic_model: Model identifier for the Anthropic path
  * - model: The model identifier to use for requests
  * - timeout: Request timeout in seconds
  * - profile: Profile for prompt templates
@@ -276,9 +279,11 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             );
         }
         $client = new \dokuwiki\plugin\dokullm\LlmClient(
-            $this->getConf('api_url'),
-            $this->getConf('api_key'),
-            $this->getConf('model'),
+            $this->getConf('openai_api_url'),
+            $this->getConf('openai_api_key'),
+            $this->getConf('openai_model'),
+            $this->getConf('anthropic_api_key'),
+            $this->getConf('anthropic_model'),
             $this->getConf('timeout'),
             $this->getConf('temperature'),
             $this->getConf('top_p'),
@@ -442,9 +447,11 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 );
             }
             $client = new \dokuwiki\plugin\dokullm\LlmClient(
-                $this->getConf('api_url'),
-                $this->getConf('api_key'),
-                $this->getConf('model'),
+                $this->getConf('openai_api_url'),
+                $this->getConf('openai_api_key'),
+                $this->getConf('openai_model'),
+                $this->getConf('anthropic_api_key'),
+                $this->getConf('anthropic_model'),
                 $this->getConf('timeout'),
                 $this->getConf('temperature'),
                 $this->getConf('top_p'),
