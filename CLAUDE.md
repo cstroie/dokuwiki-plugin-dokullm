@@ -109,7 +109,7 @@ The profile index page (`dokullm:profiles:PROFILE`) contains a DokuWiki table wi
 
 ### Prompt placeholders
 
-`{text}`, `{template}`, `{examples}`, `{snippets}`, `{previous}`, `{prompt}`, `{current_date}`, `{previous_date}`, `{action}`, `{think}`
+`{text}`, `{template}`, `{examples}`, `{snippets}`, `{previous}`, `{prompt}`, `{current_date}`, `{current_time}`, `{previous_date}`, `{action}`, `{think}`
 
 ### Prompt loading fallback
 

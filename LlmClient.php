@@ -1046,6 +1046,14 @@ class LlmClient
                                                 '';
                     break;
 
+                case 'current_date':
+                    $variables[$placeholder] = date('Y-m-d');
+                    break;
+
+                case 'current_time':
+                    $variables[$placeholder] = date('H:i');
+                    break;
+
                 case 'prompt':
                     // Add the custom prompt value
                     $variables[$placeholder] = isset($variables['prompt']) ? $variables['prompt'] : '';
