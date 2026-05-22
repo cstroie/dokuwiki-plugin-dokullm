@@ -1,10 +1,29 @@
 <?php
 /**
  * Options for the dokullm plugin
- * 
+ *
  * This file defines the configuration metadata for the LLM integration plugin.
  * It specifies the type and validation rules for each configuration option.
  */
+
+/**
+ * Load cached model list for a provider.
+ * Returns array of model ID strings, or null if the cache file is absent/empty.
+ * Always prepends $current so the saved value stays valid even if it is no
+ * longer returned by the provider (avoids multichoice validation failures).
+ */
+function _dokullm_model_choices($provider, $current) {
+    if (!defined('DOKU_DATA')) return null;
+    $file = DOKU_DATA . 'tmp/plugin_dokullm_models_' . $provider . '.json';
+    if (!file_exists($file)) return null;
+    $data = json_decode(file_get_contents($file), true);
+    $models = $data['models'] ?? [];
+    if (!is_array($models) || empty($models)) return null;
+    if ($current !== '' && !in_array($current, $models, true)) {
+        array_unshift($models, $current);
+    }
+    return $models;
+}
 
 /**
  * Metadata for the provider configuration option
@@ -32,10 +51,12 @@ $meta['openai_api_key'] = array('password');
 
 /**
  * Metadata for the OpenAI model configuration option
+ * Rendered as a dropdown when a cached model list is available.
  *
  * @var array
  */
-$meta['openai_model'] = array('string');
+$_om = _dokullm_model_choices('openai', $conf['plugin']['dokullm']['openai_model'] ?? '');
+$meta['openai_model'] = $_om ? array('multichoice', '_choices' => $_om) : array('string');
 
 /**
  * Metadata for the Anthropic API key configuration option
@@ -46,10 +67,12 @@ $meta['anthropic_api_key'] = array('password');
 
 /**
  * Metadata for the Anthropic model configuration option
+ * Rendered as a dropdown when a cached model list is available.
  *
  * @var array
  */
-$meta['anthropic_model'] = array('string');
+$_am = _dokullm_model_choices('anthropic', $conf['plugin']['dokullm']['anthropic_model'] ?? '');
+$meta['anthropic_model'] = $_am ? array('multichoice', '_choices' => $_am) : array('string');
 
 /**
  * Metadata for the timeout configuration option
@@ -224,16 +247,18 @@ $meta['ollama_port'] = array('numeric');
 
 /**
  * Metadata for the Ollama LLM model configuration option
+ * Rendered as a dropdown when a cached model list is available.
  *
  * @var array
  */
-$meta['ollama_model'] = array('string');
+$_lm = _dokullm_model_choices('ollama', $conf['plugin']['dokullm']['ollama_model'] ?? '');
+$meta['ollama_model'] = $_lm ? array('multichoice', '_choices' => $_lm) : array('string');
 
 /**
  * Metadata for the Ollama embeddings model configuration option
- *
- * Defines the Ollama embeddings model as a string input field in the configuration interface.
+ * Rendered as a dropdown when a cached model list is available.
  *
  * @var array
  */
-$meta['ollama_embeddings_model'] = array('string');
+$_em = _dokullm_model_choices('ollama_embeddings', $conf['plugin']['dokullm']['ollama_embeddings_model'] ?? '');
+$meta['ollama_embeddings_model'] = $_em ? array('multichoice', '_choices' => $_em) : array('string');

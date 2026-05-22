@@ -155,7 +155,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      */
     public function handleDokuwikiStarted(Doku_Event $event, $param)
     {
-        global $JSINFO;
+        global $JSINFO, $ACT;
 
         if (!isset($JSINFO['plugins'])) {
             $JSINFO['plugins'] = [];
@@ -171,6 +171,18 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             $l10n[$key] = $value;
         }
         $JSINFO['plugins']['dokullm']['lang'] = $l10n;
+
+        // On admin pages, auto-refresh model caches that are stale (> 24 h)
+        if ($ACT === 'admin' && auth_isadmin()) {
+            $ttl = 86400;
+            foreach (['openai', 'anthropic', 'ollama', 'ollama_embeddings'] as $provider) {
+                $cache = $this->loadModelCache($provider);
+                $age   = $cache ? (time() - ($cache['fetched_at'] ?? 0)) : PHP_INT_MAX;
+                if ($age > $ttl) {
+                    $this->refreshModelCache($provider);
+                }
+            }
+        }
     }
 
 
@@ -637,10 +649,68 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
 
         try {
             $models = $this->fetchModels($provider);
+            $this->saveModelCache($provider, $models);
             echo json_encode(['models' => $models]);
         } catch (Exception $e) {
             http_status(500);
             echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Return the path to the JSON cache file for a provider's model list
+     *
+     * @param string $provider Provider key: 'openai', 'anthropic', 'ollama', 'ollama_embeddings'
+     * @return string Absolute path to the cache file
+     */
+    private function modelCacheFile($provider)
+    {
+        return DOKU_DATA . 'tmp/plugin_dokullm_models_' . $provider . '.json';
+    }
+
+    /**
+     * Load the cached model list for a provider
+     *
+     * @param string $provider Provider key
+     * @return array|null Cache data array with 'models' and 'fetched_at', or null if missing/empty
+     */
+    private function loadModelCache($provider)
+    {
+        $file = $this->modelCacheFile($provider);
+        if (!file_exists($file)) return null;
+        $data = json_decode(file_get_contents($file), true);
+        return (is_array($data['models'] ?? null) && !empty($data['models'])) ? $data : null;
+    }
+
+    /**
+     * Write a model list to the provider's cache file
+     *
+     * @param string $provider Provider key
+     * @param array  $models   List of model ID strings
+     */
+    private function saveModelCache($provider, array $models)
+    {
+        $file = $this->modelCacheFile($provider);
+        file_put_contents($file, json_encode(['models' => $models, 'fetched_at' => time()]));
+    }
+
+    /**
+     * Fetch models from a provider and save to cache; log and swallow errors
+     *
+     * Uses a short 5-second timeout so a slow/unreachable provider does not
+     * block the admin page load.
+     *
+     * @param string $provider Provider key
+     */
+    private function refreshModelCache($provider)
+    {
+        try {
+            $models = $this->fetchModels($provider);
+            if (!empty($models)) {
+                $this->saveModelCache($provider, $models);
+            }
+        } catch (Exception $e) {
+            \dokuwiki\Logger::error('DokuLLM: model cache refresh failed (' . $provider . '): ' . $e->getMessage());
         }
     }
 
@@ -654,10 +724,11 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
     private function fetchModels($provider)
     {
         switch ($provider) {
-            case 'openai':    return $this->fetchOpenAIModels();
-            case 'anthropic': return $this->fetchAnthropicModels();
-            case 'ollama':    return $this->fetchOllamaModels();
-            default:          throw new Exception('Unknown provider: ' . $provider);
+            case 'openai':             return $this->fetchOpenAIModels();
+            case 'anthropic':          return $this->fetchAnthropicModels();
+            case 'ollama':
+            case 'ollama_embeddings':  return $this->fetchOllamaModels();
+            default:                   throw new Exception('Unknown provider: ' . $provider);
         }
     }
 
@@ -690,7 +761,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         curl_setopt($ch, CURLOPT_URL, $modelsUrl);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $this->getConf('timeout'));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
         $response = curl_exec($ch);
@@ -729,7 +800,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             'anthropic-version: 2023-06-01',
         ]);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $this->getConf('timeout'));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
         $response = curl_exec($ch);
@@ -764,7 +835,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, 'http://' . $host . ':' . $port . '/api/tags');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $this->getConf('timeout'));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
