@@ -4,10 +4,12 @@
  *
  */
 
-$lang['provider']               = 'Furnizor LLM (openai = orice API compatibil OpenAI; anthropic = API nativ Anthropic)';
-$lang['api_url']                = 'URL endpoint API LLM (neutilizat când furnizorul este anthropic)';
-$lang['api_key']                = 'Cheie API pentru autentificarea cu serviciul LLM';
-$lang['model']                  = 'Nume model utilizat pentru procesarea textului';
+$lang['provider']               = 'Furnizor LLM';
+$lang['openai_api_url']         = 'URL endpoint API OpenAI (orice API compatibil OpenAI)';
+$lang['openai_api_key']         = 'Cheie API OpenAI';
+$lang['openai_model']           = 'Nume model OpenAI';
+$lang['anthropic_api_key']      = 'Cheie API Anthropic';
+$lang['anthropic_model']        = 'Nume model Anthropic';
 $lang['timeout']                = 'Timeout cerere (secunde)';
 $lang['profile']                = 'Profil prompt';
 $lang['temperature']            = 'Temperatură (0.0‑1.0) – valori mai mici produc un output mai concentrat';
@@ -26,4 +28,5 @@ $lang['chroma_database']        = 'Bază de date ChromaDB – numele bazei de da
 $lang['chroma_collection']      = 'Colecție ChromaDB – numele colecției implicite pentru stocarea documentelor';
 $lang['ollama_host']            = 'Host Ollama – numele de gazdă sau adresa IP a serverului Ollama';
 $lang['ollama_port']            = 'Port Ollama – numărul portului pe care rulează Ollama';
+$lang['ollama_model']           = 'Model LLM Ollama – modelul utilizat pentru generarea de text (furnizor = ollama)';
 $lang['ollama_embeddings_model']= 'Model embeddings Ollama – numele modelului utilizat pentru generarea de embeddings text';

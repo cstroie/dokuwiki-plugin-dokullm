@@ -14,35 +14,42 @@
  *
  * @var array
  */
-$meta['provider'] = array('multichoice', '_choices' => array('openai', 'anthropic'));
+$meta['provider'] = array('multichoice', '_choices' => array('openai', 'anthropic', 'ollama'));
 
 /**
- * Metadata for the API URL configuration option
- *
- * Defines the API endpoint URL as a string input field in the configuration interface.
+ * Metadata for the OpenAI API URL configuration option
  *
  * @var array
  */
-$meta['api_url'] = array('string');
+$meta['openai_api_url'] = array('string');
 
 /**
- * Metadata for the API key configuration option
- * 
- * Defines the API key as a password field in the configuration interface.
- * This ensures the value is masked when entered and stored securely.
- * 
+ * Metadata for the OpenAI API key configuration option
+ *
  * @var array
  */
-$meta['api_key'] = array('password');
+$meta['openai_api_key'] = array('password');
 
 /**
- * Metadata for the model configuration option
- * 
- * Defines the model identifier as a string input field in the configuration interface.
- * 
+ * Metadata for the OpenAI model configuration option
+ *
  * @var array
  */
-$meta['model'] = array('string');
+$meta['openai_model'] = array('string');
+
+/**
+ * Metadata for the Anthropic API key configuration option
+ *
+ * @var array
+ */
+$meta['anthropic_api_key'] = array('password');
+
+/**
+ * Metadata for the Anthropic model configuration option
+ *
+ * @var array
+ */
+$meta['anthropic_model'] = array('string');
 
 /**
  * Metadata for the timeout configuration option
@@ -134,12 +141,10 @@ $meta['replace_id'] = array('onoff');
 $meta['think'] = array('onoff');
 
 /**
- * Metadata for the use_tools configuration option
- * 
+ * Metadata for the tools configuration option
+ *
  * Defines whether the LLM can use tools to enhance its responses.
- * When enabled, the LLM can call tools like get_document, get_template, and get_examples;
- * when disabled, these tools will not be available to the LLM.
- * 
+ *
  * @var array
  */
 $meta['tools'] = array('onoff');
@@ -218,10 +223,17 @@ $meta['ollama_host'] = array('string');
 $meta['ollama_port'] = array('numeric');
 
 /**
+ * Metadata for the Ollama LLM model configuration option
+ *
+ * @var array
+ */
+$meta['ollama_model'] = array('string');
+
+/**
  * Metadata for the Ollama embeddings model configuration option
- * 
+ *
  * Defines the Ollama embeddings model as a string input field in the configuration interface.
- * 
+ *
  * @var array
  */
 $meta['ollama_embeddings_model'] = array('string');
