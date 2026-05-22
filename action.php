@@ -196,7 +196,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      */
     private function processRequest()
     {
-        global $INPUT;
+        global $INPUT, $ID;
         // Get form data
         $action = $INPUT->str('action');
         $text = $INPUT->str('text');

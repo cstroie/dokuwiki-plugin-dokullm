@@ -132,7 +132,7 @@ $meta['think'] = array('onoff');
  * 
  * @var array
  */
-$meta['use_tools'] = array('onoff');
+$meta['tools'] = array('onoff');
 
 /**
  * Metadata for the enable_chromadb configuration option

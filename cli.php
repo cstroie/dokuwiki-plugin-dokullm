@@ -68,7 +68,7 @@ class cli_plugin_dokullm extends CLIPlugin {
         $database = $this->getConf('chroma_database');
         $ollamaHost = $this->getConf('ollama_host');
         $ollamaPort = (int)$this->getConf('ollama_port');
-        $ollamaModel = $this->getConf('ollama_model');
+        $ollamaModel = $this->getConf('ollama_embeddings_model');
         $verbose = $options->getOpt('verbose');
         
         $action = $options->getCmd();

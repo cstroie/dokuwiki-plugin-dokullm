@@ -534,7 +534,7 @@ class LlmClient
 
         // If the profile-specific prompt doesn't exist, try default as fallback
         if ($prompt === false && $this->profile !== 'default') {
-            $promptPageId = 'dokullm:profile:default:' . $promptName;
+            $promptPageId = 'dokullm:profiles:default:' . $promptName;
             $prompt = $this->getPageContent($promptPageId);
         }
 
@@ -876,10 +876,7 @@ class LlmClient
     {
         // If we have a ChromaDB client passed in constructor, use it
         if ($this->chromaClient !== null) {
-            // Get the collection name based on the page ID
-        // FIXME
-            $chromaCollection = 'reports';
-            $pageId = $pageId;
+            $chromaCollection = 'documents';
 
             if (!empty($this->pageId)) {
                 // Split the page ID by ':' and take the first part as collection name
