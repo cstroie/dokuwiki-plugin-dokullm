@@ -57,6 +57,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         $controller->register_hook('DOKUWIKI_STARTED', 'AFTER', $this, 'handleDokuwikiStarted');
         $controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'handleMetaHeaders');
         $controller->register_hook('AJAX_CALL_UNKNOWN', 'BEFORE', $this, 'handleAjax');
+        $controller->register_hook('AJAX_CALL_UNKNOWN', 'BEFORE', $this, 'handleAjaxModels');
         $controller->register_hook('COMMON_PAGETPL_LOAD', 'BEFORE', $this, 'handleTemplate');
         $controller->register_hook('MENU_ITEMS_ASSEMBLY', 'AFTER', $this, 'addCopyPageButton', array());
         $controller->register_hook('INDEXER_TASKS_RUN', 'AFTER', $this, 'handlePageSave');
@@ -126,13 +127,21 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      */
     public function handleMetaHeaders(Doku_Event $event, $param)
     {
-        global $INFO;
-        // Only add JS to edit pages
+        global $INFO, $ACT;
+        // Add editor JS on edit/preview pages
         if ($INFO['act'] == 'edit' || $INFO['act'] == 'preview') {
             $event->data['script'][] = array(
                 'type' => 'text/javascript',
                 'src' => DOKU_BASE . 'lib/plugins/dokullm/script.js',
                 '_data' => 'dokullm'
+            );
+        }
+        // Add admin JS on the admin config page
+        if ($ACT === 'admin') {
+            $event->data['script'][] = array(
+                'type' => 'text/javascript',
+                'src' => DOKU_BASE . 'lib/plugins/dokullm/admin.js',
+                '_data' => 'dokullm-admin'
             );
         }
     }
@@ -597,6 +606,183 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         }
     }
 
+
+
+    /**
+     * Handle AJAX requests for fetching available models from a provider
+     *
+     * Responds to the 'plugin_dokullm_models' call.
+     * Only accessible to admin users.
+     *
+     * @param Doku_Event $event The event object
+     * @param mixed $param Additional parameters
+     */
+    public function handleAjaxModels(Doku_Event $event, $param)
+    {
+        if ($event->data !== 'plugin_dokullm_models') {
+            return;
+        }
+
+        $event->stopPropagation();
+        $event->preventDefault();
+
+        if (!auth_isadmin()) {
+            http_status(403);
+            echo json_encode(['error' => 'Admin access required']);
+            return;
+        }
+
+        global $INPUT;
+        $provider = $INPUT->str('provider', 'openai');
+
+        try {
+            $models = $this->fetchModels($provider);
+            echo json_encode(['models' => $models]);
+        } catch (Exception $e) {
+            http_status(500);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Dispatch model list fetching to the appropriate provider method
+     *
+     * @param string $provider One of 'openai', 'anthropic', 'ollama'
+     * @return array Sorted list of model ID strings
+     * @throws Exception On unknown provider or fetch failure
+     */
+    private function fetchModels($provider)
+    {
+        switch ($provider) {
+            case 'openai':    return $this->fetchOpenAIModels();
+            case 'anthropic': return $this->fetchAnthropicModels();
+            case 'ollama':    return $this->fetchOllamaModels();
+            default:          throw new Exception('Unknown provider: ' . $provider);
+        }
+    }
+
+    /**
+     * Fetch model list from an OpenAI-compatible /v1/models endpoint
+     *
+     * Derives the models URL from the configured openai_api_url by replacing
+     * everything after /v1/ with 'models'.
+     *
+     * @return array Sorted list of model ID strings
+     * @throws Exception On cURL or HTTP error
+     */
+    private function fetchOpenAIModels()
+    {
+        $apiUrl = $this->getConf('openai_api_url');
+        $apiKey = $this->getConf('openai_api_key');
+
+        // Replace path after /v1/ with models; fall back to appending /models
+        $modelsUrl = preg_replace('/\/v1\/.*$/', '/v1/models', $apiUrl);
+        if ($modelsUrl === $apiUrl) {
+            $modelsUrl = rtrim($apiUrl, '/') . '/models';
+        }
+
+        $headers = ['Content-Type: application/json'];
+        if (!empty($apiKey)) {
+            $headers[] = 'Authorization: Bearer ' . $apiKey;
+        }
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $modelsUrl);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->getConf('timeout'));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error    = curl_error($ch);
+        curl_close($ch);
+
+        if ($error)         throw new Exception('cURL error: ' . $error);
+        if ($httpCode !== 200) throw new Exception('HTTP ' . $httpCode . ': ' . $response);
+
+        $data   = json_decode($response, true);
+        $models = [];
+        foreach ($data['data'] ?? [] as $model) {
+            if (isset($model['id'])) {
+                $models[] = $model['id'];
+            }
+        }
+        sort($models);
+        return $models;
+    }
+
+    /**
+     * Fetch model list from Anthropic's /v1/models endpoint
+     *
+     * @return array List of model ID strings (as returned by Anthropic, newest first)
+     * @throws Exception On cURL or HTTP error
+     */
+    private function fetchAnthropicModels()
+    {
+        $apiKey = $this->getConf('anthropic_api_key');
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, 'https://api.anthropic.com/v1/models');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'x-api-key: ' . $apiKey,
+            'anthropic-version: 2023-06-01',
+        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->getConf('timeout'));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error    = curl_error($ch);
+        curl_close($ch);
+
+        if ($error)         throw new Exception('cURL error: ' . $error);
+        if ($httpCode !== 200) throw new Exception('HTTP ' . $httpCode . ': ' . $response);
+
+        $data   = json_decode($response, true);
+        $models = [];
+        foreach ($data['data'] ?? [] as $model) {
+            if (isset($model['id'])) {
+                $models[] = $model['id'];
+            }
+        }
+        return $models;
+    }
+
+    /**
+     * Fetch model list from Ollama's /api/tags endpoint
+     *
+     * @return array List of model name strings
+     * @throws Exception On cURL or HTTP error
+     */
+    private function fetchOllamaModels()
+    {
+        $host = $this->getConf('ollama_host');
+        $port = $this->getConf('ollama_port');
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, 'http://' . $host . ':' . $port . '/api/tags');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->getConf('timeout'));
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error    = curl_error($ch);
+        curl_close($ch);
+
+        if ($error)         throw new Exception('cURL error: ' . $error);
+        if ($httpCode !== 200) throw new Exception('HTTP ' . $httpCode . ': ' . $response);
+
+        $data   = json_decode($response, true);
+        $models = [];
+        foreach ($data['models'] ?? [] as $model) {
+            if (isset($model['name'])) {
+                $models[] = $model['name'];
+            }
+        }
+        return $models;
+    }
 
 
    /**
