@@ -82,7 +82,7 @@ class LlmClient
     /** @var bool Whether to enable thinking in LLM responses */
     private $think;
 
-    /** @var string The API provider: 'openai' or 'anthropic' */
+    /** @var string The API provider: 'openai', 'anthropic', or 'ollama' */
     private $provider;
 
     /** @var object|null ChromaDB client instance */
@@ -93,9 +93,6 @@ class LlmClient
 
     /**
      * Initialize the LLM client with configuration settings
-     *
-     * Retrieves configuration values from DokuWiki's configuration system
-     * for API URL, key, model, timeout, and LLM sampling parameters.
      *
      * Configuration values:
      * - openai_api_url: OpenAI-compatible API endpoint URL
@@ -172,116 +169,17 @@ class LlmClient
     }
 
     /**
-     * Process text with a custom user prompt
+     * Route the request to the appropriate provider
      *
-     * Sends a custom prompt to the LLM along with the provided text.
-     *
-     * @param string $text The text to process
-     * @param string $customPrompt The custom prompt to use
-     * @param array $metadata Optional metadata containing template and examples
-     * @return string The processed text
-     */
-
-    /**
-     * Get the list of available tools for the LLM
-     *
-     * Defines the tools that can be used by the LLM during processing.
-     *
-     * @return array List of tool definitions
-     */
-    private function getAvailableTools()
-    {
-        return [
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'get_document',
-                    'description' => 'Retrieve the full content of a specific document by providing its unique document ID. Use this when you need to access the complete text of a particular document for reference or analysis.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'id' => [
-                                'type' => 'string',
-                                'description' => 'The unique identifier of the document to retrieve. This should be a valid document ID that exists in the system.'
-                            ]
-                        ],
-                        'required' => ['id']
-                    ]
-                ]
-            ],
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'get_template',
-                    'description' => 'Retrieve a relevant template document that matches the current context and content. Use this when you need a structural template or format example to base your response on, particularly for creating consistent reports or documents.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'type' => [
-                                'type' => 'string',
-                                'description' => 'The type of the template (e.g., "mri" for MRI reports, "daily" for daily reports).',
-                                'default' => ''
-                            ]
-                        ]
-                    ]
-                ]
-            ],
-            [
-                'type' => 'function',
-                'function' => [
-                    'name' => 'get_examples',
-                    'description' => 'Retrieve relevant example snippets from previous reports that are similar to the current context. Use this when you need to see how similar content was previously handled, to maintain consistency in style, terminology, and structure.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'count' => [
-                                'type' => 'integer',
-                                'description' => 'The number of examples to retrieve (1-20). Use more examples when you need comprehensive reference material, fewer when you need just a quick reminder of the style.',
-                                'default' => 5
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-        ];
-    }
-
-    /**
-     * Call the LLM API with the specified prompt
-     *
-     * Makes an HTTP POST request to the configured API endpoint with
-     * the prompt and other parameters. Handles authentication if an
-     * API key is configured.
-     *
-     * The method constructs a conversation with system and user messages,
-     * including context information from metadata when available.
-     *
-     * Complex logic includes:
-     * 1. Loading and enhancing the system prompt with metadata context
-     * 2. Building the API request with model parameters
-     * 3. Handling authentication with API key if configured
-     * 4. Making the HTTP request with proper error handling
-     * 5. Parsing and validating the API response
-     * 6. Supporting tool usage with automatic tool calling when enabled
-     * 7. Implementing context enhancement with templates, examples, and snippets
-     *
-     * The context information includes:
-     * - Template content: Used as a starting point for the response
-     * - Example pages: Full content of specified example pages
-     * - Text snippets: Relevant text examples from ChromaDB
-     *
-     * When tools are enabled, the method supports automatic tool calling:
-     * - Tools can retrieve documents, templates, and examples as needed
-     * - Tool responses are cached to avoid duplicate calls with identical parameters
-     * - Infinite loop protection prevents excessive tool calls
+     * Loads the system prompt then dispatches to callOpenAIAPI(),
+     * callAnthropicAPI(), or callOllamaAPI() based on the configured provider.
      *
      * @param string $command The command name for loading command-specific system prompts
-     * @param string $prompt The prompt to send to the LLM as user message
-     * @param array $metadata Optional metadata containing template, examples, and snippets
+     * @param string $prompt The user message
+     * @param array $metadata Optional metadata (unused after prompt loading)
+     * @param bool $useTools Whether to enable tool calling
      * @return string The response content from the LLM
-     * @throws Exception If the API request fails or returns unexpected format
      */
-
     private function callAPI($command, $prompt, $metadata = [], $useTools = false)
     {
         // Load system prompt which provides general instructions to the LLM
@@ -294,7 +192,29 @@ class LlmClient
         if ($this->provider === 'ollama') {
             return $this->callOllamaAPI($systemPrompt, $prompt, $useTools);
         }
+        return $this->callOpenAIAPI($systemPrompt, $prompt, $useTools);
+    }
 
+    // =========================================================================
+    // OpenAI provider
+    // =========================================================================
+
+    /**
+     * Build and send a request to an OpenAI-compatible API
+     *
+     * Constructs the request body with model parameters and delegates to
+     * callOpenAIAPIWithTools() for the actual HTTP call and tool-call handling.
+     *
+     * Note: keep_alive and think are sent at the top level for compatibility
+     * with Ollama's OpenAI-emulation endpoint; real OpenAI ignores them.
+     *
+     * @param string $systemPrompt The system prompt
+     * @param string $prompt The user message
+     * @param bool $useTools Whether to enable tool calling
+     * @return string The response text
+     */
+    private function callOpenAIAPI($systemPrompt, $prompt, $useTools = false)
+    {
         // Prepare API request data with model parameters
         $data = [
             'model' => $this->openai_model,
@@ -310,8 +230,7 @@ class LlmClient
 
         // Add tools to the request only if useTools is true
         if ($useTools) {
-            // Define available tools
-            $data['tools'] = $this->getAvailableTools();
+            $data['tools'] = $this->getOpenAITools();
             $data['tool_choice'] = 'auto';
             $data['parallel_tool_calls'] = false;
         }
@@ -330,35 +249,26 @@ class LlmClient
             $data['min_p'] = $this->min_p;
         }
 
-        // Make an API call with tool responses
-        return $this->callAPIWithTools($data, false);
+        return $this->callOpenAIAPIWithTools($data, false);
     }
 
     /**
-     * Make an API call with tool responses
+     * Execute an OpenAI API call, handling tool use recursively
      *
-     * Sends a follow-up request to the LLM with tool responses.
-     * Implements complex logic for handling tool calls with caching and loop protection.
+     * Sends the request, parses choices[0].message, and recurses when
+     * tool_calls are present until a final text response is received.
      *
-     * Complex logic includes:
-     * 1. Making HTTP requests with proper authentication and error handling
-     * 2. Processing tool calls from the LLM response
-     * 3. Caching tool responses to avoid duplicate calls with identical parameters
-     * 4. Tracking tool call counts to prevent infinite loops
-     * 5. Implementing loop protection with call count limits
-     * 6. Handling recursive tool calls until final content is generated
+     * Loop protection:
+     * - max 3 calls per individual tool
+     * - max 10 total tool calls across all tools
      *
-     * Loop protection works by:
-     * - Tracking individual tool call counts (max 3 per tool)
-     * - Tracking total tool calls (max 10 total)
-     * - Disabling tools when limits are exceeded to break potential loops
-     *
-     * @param array $data The API request data including messages with tool responses
-     * @param bool $toolsCalled Whether tools have already been called (used for loop protection)
-     * @param bool $useTools Whether to process tool calls (used for loop protection)
-     * @return string The final response content
+     * @param array $data The API request body
+     * @param bool $toolsCalled Whether the loop limit has been hit (strips tools on true)
+     * @param bool $useTools Whether to process tool_calls in the response
+     * @return string The final text content
+     * @throws Exception On HTTP or format errors
      */
-    private function callAPIWithTools($data, $toolsCalled = false, $useTools = true)
+    private function callOpenAIAPIWithTools($data, $toolsCalled = false, $useTools = true)
     {
         // Set up HTTP headers, including authentication if API key is configured
         $headers = [
@@ -369,7 +279,7 @@ class LlmClient
             $headers[] = 'Authorization: Bearer ' . $this->openai_api_key;
         }
 
-       // If tools have already been called, remove tools and tool_choice from data to prevent infinite loops
+        // If tools have already been called, remove tools and tool_choice from data to prevent infinite loops
         if ($toolsCalled) {
             unset($data['tools']);
             unset($data['tool_choice']);
@@ -436,7 +346,7 @@ class LlmClient
                 }
                 $this->toolCallCounts[$toolName]++;
 
-                $toolResponse = $this->handleToolCall($toolCall);
+                $toolResponse = $this->handleToolCallOpenAI($toolCall);
                 $messages[] = $toolResponse;
             }
 
@@ -458,12 +368,400 @@ class LlmClient
 
             // Make another API call with tool responses
             $data['messages'] = $messages;
-            return $this->callAPIWithTools($data, $toolsCalled, $useTools);
+            return $this->callOpenAIAPIWithTools($data, $toolsCalled, $useTools);
         }
 
         // Throw exception for unexpected response format
         throw new Exception('Unexpected API response format');
     }
+
+    /**
+     * Get the list of available tools in OpenAI function-calling format
+     *
+     * Returns tool definitions that are also used by the Ollama path (same format)
+     * and converted to Anthropic format by getAnthropicTools().
+     *
+     * @return array List of tool definitions
+     */
+    private function getOpenAITools()
+    {
+        return [
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'get_document',
+                    'description' => 'Retrieve the full content of a specific document by providing its unique document ID. Use this when you need to access the complete text of a particular document for reference or analysis.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'id' => [
+                                'type' => 'string',
+                                'description' => 'The unique identifier of the document to retrieve. This should be a valid document ID that exists in the system.'
+                            ]
+                        ],
+                        'required' => ['id']
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'get_template',
+                    'description' => 'Retrieve a relevant template document that matches the current context and content. Use this when you need a structural template or format example to base your response on, particularly for creating consistent reports or documents.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'type' => [
+                                'type' => 'string',
+                                'description' => 'The type of the template (e.g., "mri" for MRI reports, "daily" for daily reports).',
+                                'default' => ''
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'get_examples',
+                    'description' => 'Retrieve relevant example snippets from previous reports that are similar to the current context. Use this when you need to see how similar content was previously handled, to maintain consistency in style, terminology, and structure.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'count' => [
+                                'type' => 'integer',
+                                'description' => 'The number of examples to retrieve (1-20). Use more examples when you need comprehensive reference material, fewer when you need just a quick reminder of the style.',
+                                'default' => 5
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ];
+    }
+
+    /**
+     * Handle a tool call from the OpenAI path
+     *
+     * Processes tool calls made by the LLM and returns appropriate responses.
+     * Arguments arrive as a JSON string (OpenAI format) and are decoded here.
+     * Implements caching to avoid duplicate calls with identical parameters.
+     *
+     * @param array $toolCall The tool call data from the LLM response
+     * @return array The role:tool message with tool_call_id
+     */
+    private function handleToolCallOpenAI($toolCall)
+    {
+        $toolName = $toolCall['function']['name'];
+        $arguments = json_decode($toolCall['function']['arguments'], true);
+
+        // Create a cache key from the tool name and arguments
+        $cacheKey = md5($toolName . serialize($arguments));
+
+        // Check if we have a cached result for this tool call
+        if (isset($this->toolCallCache[$cacheKey])) {
+            // Return cached result and indicate it was found in cache
+            $toolResponse = $this->toolCallCache[$cacheKey];
+            // Update with current tool call ID
+            $toolResponse['tool_call_id'] = $toolCall['id'];
+            $toolResponse['cached'] = true;
+            return $toolResponse;
+        }
+
+        $toolResponse = [
+            'role' => 'tool',
+            'tool_call_id' => $toolCall['id'],
+            'cached' => false
+        ];
+
+        switch ($toolName) {
+            case 'get_document':
+                $documentId = $arguments['id'];
+                $content = $this->getPageContent($documentId);
+                if ($content === false) {
+                    $toolResponse['content'] = 'Document not found: ' . $documentId;
+                } else {
+                    $toolResponse['content'] = $content;
+                }
+                break;
+
+            case 'get_template':
+                $toolResponse['content'] = $this->getTemplateContent();
+                break;
+
+            case 'get_examples':
+                $count = isset($arguments['count']) ? (int)$arguments['count'] : 5;
+                $toolResponse['content'] = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                break;
+
+            default:
+                $toolResponse['content'] = 'Unknown tool: ' . $toolName;
+        }
+
+        // Cache the result for future calls with the same parameters
+        $cacheEntry = $toolResponse;
+        // Remove tool_call_id and cached flag from cache as they change per call
+        unset($cacheEntry['tool_call_id']);
+        unset($cacheEntry['cached']);
+        $this->toolCallCache[$cacheKey] = $cacheEntry;
+
+        return $toolResponse;
+    }
+
+    // =========================================================================
+    // Anthropic provider
+    // =========================================================================
+
+    /**
+     * Build and send a request to Anthropic's native Messages API
+     *
+     * Entry point for the Anthropic provider path. Constructs the request body
+     * in Anthropic format and delegates to callAnthropicAPIWithTools().
+     *
+     * When think is enabled, forces temperature to 1.0 (Anthropic requirement)
+     * and omits top_p, top_k, and min_p which are incompatible with thinking mode.
+     * min_p is always omitted as Anthropic does not support it.
+     *
+     * @param string $systemPrompt The system prompt
+     * @param string $prompt The user message
+     * @param bool $useTools Whether to enable tool calling
+     * @return string The response text
+     */
+    private function callAnthropicAPI($systemPrompt, $prompt, $useTools = false)
+    {
+        $data = [
+            'model'      => $this->anthropic_model,
+            'max_tokens' => 6144,
+            'system'     => $systemPrompt,
+            'messages'   => [
+                ['role' => 'user', 'content' => $prompt]
+            ],
+        ];
+
+        if ($this->think) {
+            // Anthropic requires temperature=1.0 when extended thinking is enabled;
+            // top_p, top_k, and min_p must not be sent in this mode.
+            $data['thinking'] = [
+                'type'          => 'enabled',
+                'budget_tokens' => 5000,
+            ];
+            $data['temperature'] = 1.0;
+        } else {
+            if ($this->temperature !== null) {
+                $data['temperature'] = $this->temperature;
+            }
+            if ($this->top_p !== null) {
+                $data['top_p'] = $this->top_p;
+            }
+            if ($this->top_k !== null) {
+                $data['top_k'] = $this->top_k;
+            }
+            // min_p is not a valid Anthropic parameter; always omitted
+        }
+
+        if ($useTools) {
+            $data['tools'] = $this->getAnthropicTools();
+        }
+
+        return $this->callAnthropicAPIWithTools($data, false, $useTools);
+    }
+
+    /**
+     * Execute an Anthropic API call, handling tool use recursively
+     *
+     * Sends the request to https://api.anthropic.com/v1/messages, parses the
+     * typed content blocks in the response (text, thinking, tool_use), and
+     * recurses when tool calls are present until a final text response is received.
+     *
+     * Applies the same loop-protection limits as the OpenAI path:
+     * - max 3 calls per individual tool
+     * - max 10 total tool calls across all tools
+     *
+     * @param array $data The full request body
+     * @param bool $toolsCalled Whether the loop limit has been hit (strips tools on true)
+     * @param bool $useTools Whether to process tool_use blocks
+     * @return string The final text content
+     * @throws Exception On HTTP or format errors
+     */
+    private function callAnthropicAPIWithTools($data, $toolsCalled = false, $useTools = true)
+    {
+        $headers = [
+            'Content-Type: application/json',
+            'x-api-key: ' . $this->anthropic_api_key,
+            'anthropic-version: 2023-06-01',
+        ];
+
+        // Remove tools from the request when loop limit is reached
+        if ($toolsCalled) {
+            unset($data['tools']);
+        }
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, 'https://api.anthropic.com/v1/messages');
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error    = curl_error($ch);
+        curl_close($ch);
+
+        if ($error) {
+            throw new Exception('Anthropic API request failed: ' . $error);
+        }
+        if ($httpCode !== 200) {
+            throw new Exception('Anthropic API request failed with HTTP code: ' . $httpCode . ' - ' . $response);
+        }
+
+        $result = json_decode($response, true);
+
+        // Parse typed content blocks
+        $textContent   = '';
+        $toolUseBlocks = [];
+        foreach ($result['content'] ?? [] as $block) {
+            if ($block['type'] === 'text') {
+                $textContent .= $block['text'];
+            } elseif ($block['type'] === 'tool_use') {
+                $toolUseBlocks[] = $block;
+            }
+            // 'thinking' blocks are intentionally ignored; Anthropic thinking is internal.
+        }
+
+        // Final text response
+        if (!empty($textContent) && empty($toolUseBlocks)) {
+            $this->toolCallCounts = [];
+            return $textContent;
+        }
+
+        // Tool use response — bundle all results into one user message
+        if ($useTools && !empty($toolUseBlocks) && ($result['stop_reason'] ?? '') === 'tool_use') {
+            $messages = $data['messages'];
+
+            // Append the full assistant turn (contains tool_use blocks)
+            $messages[] = [
+                'role'    => 'assistant',
+                'content' => $result['content'],
+            ];
+
+            // Build one user message containing all tool_result content blocks
+            $toolResultBlocks = [];
+            foreach ($toolUseBlocks as $toolUseBlock) {
+                $toolName = $toolUseBlock['name'];
+
+                if (!isset($this->toolCallCounts[$toolName])) {
+                    $this->toolCallCounts[$toolName] = 0;
+                }
+                $this->toolCallCounts[$toolName]++;
+
+                $toolResultBlocks[] = $this->handleToolCallAnthropic($toolUseBlock);
+            }
+
+            $messages[] = [
+                'role'    => 'user',
+                'content' => $toolResultBlocks,
+            ];
+
+            // Check loop-protection limits
+            $toolsCalledCount = 0;
+            foreach ($this->toolCallCounts as $count) {
+                if ($count > 3) {
+                    $toolsCalled = true;
+                    break;
+                }
+                $toolsCalledCount += $count;
+            }
+            if ($toolsCalledCount > 10) {
+                $toolsCalled = true;
+            }
+
+            $data['messages'] = $messages;
+            return $this->callAnthropicAPIWithTools($data, $toolsCalled, $useTools);
+        }
+
+        throw new Exception('Unexpected Anthropic API response format');
+    }
+
+    /**
+     * Convert OpenAI-format tool definitions to Anthropic format
+     *
+     * Anthropic tools are flat objects with name, description, and input_schema,
+     * whereas OpenAI wraps them in a type:'function' envelope with a parameters key.
+     *
+     * @return array Anthropic-format tool definitions
+     */
+    private function getAnthropicTools()
+    {
+        $anthropicTools = [];
+        foreach ($this->getOpenAITools() as $tool) {
+            $fn = $tool['function'];
+            $anthropicTools[] = [
+                'name'         => $fn['name'],
+                'description'  => $fn['description'],
+                'input_schema' => $fn['parameters'],
+            ];
+        }
+        return $anthropicTools;
+    }
+
+    /**
+     * Dispatch an Anthropic tool_use block and return a tool_result content block
+     *
+     * Unlike the OpenAI path, Anthropic's input is already a decoded array
+     * (not a JSON string), and the result format is a tool_result content block
+     * rather than a role:tool message. Reuses the same $toolCallCache store
+     * with an identical MD5 key so results are shared across provider paths.
+     *
+     * @param array $toolUseBlock A tool_use content block from the Anthropic response
+     * @return array A tool_result content block ready to include in a user message
+     */
+    private function handleToolCallAnthropic($toolUseBlock)
+    {
+        $toolName  = $toolUseBlock['name'];
+        $arguments = $toolUseBlock['input'];   // already decoded array, not a JSON string
+
+        $cacheKey = md5($toolName . serialize($arguments));
+
+        if (isset($this->toolCallCache[$cacheKey])) {
+            $content = $this->toolCallCache[$cacheKey]['content'];
+        } else {
+            switch ($toolName) {
+                case 'get_document':
+                    $pageContent = $this->getPageContent($arguments['id']);
+                    $content = ($pageContent === false)
+                        ? 'Document not found: ' . $arguments['id']
+                        : $pageContent;
+                    break;
+
+                case 'get_template':
+                    $content = $this->getTemplateContent();
+                    break;
+
+                case 'get_examples':
+                    $count = isset($arguments['count']) ? (int)$arguments['count'] : 5;
+                    $content = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                    break;
+
+                default:
+                    $content = 'Unknown tool: ' . $toolName;
+            }
+
+            $this->toolCallCache[$cacheKey] = ['content' => $content];
+        }
+
+        return [
+            'type'        => 'tool_result',
+            'tool_use_id' => $toolUseBlock['id'],
+            'content'     => $content,
+        ];
+    }
+
+    // =========================================================================
+    // Ollama provider
+    // =========================================================================
 
     /**
      * Build and send a request to Ollama's native /api/chat endpoint
@@ -472,7 +770,7 @@ class LlmClient
      * by the Ollama API. The think flag is sent at the top level (supported by
      * thinking-capable models such as Qwen3). No authentication header is sent
      * because Ollama runs as a local service. Tools use the same definition
-     * format as OpenAI so getAvailableTools() is reused without conversion.
+     * format as OpenAI so getOpenAITools() is reused without conversion.
      *
      * @param string $systemPrompt The system prompt
      * @param string $prompt The user message
@@ -506,7 +804,7 @@ class LlmClient
         }
 
         if ($useTools) {
-            $data['tools'] = $this->getAvailableTools();
+            $data['tools'] = $this->getOpenAITools();
         }
 
         $url = 'http://' . $this->ollama_host . ':' . $this->ollama_port . '/api/chat';
@@ -664,325 +962,9 @@ class LlmClient
         ];
     }
 
-    /**
-     * Build and send a request to Anthropic's native Messages API
-     *
-     * Entry point for the Anthropic provider path. Constructs the request body
-     * in Anthropic format and delegates to callAnthropicAPIWithTools().
-     *
-     * When think is enabled, forces temperature to 1.0 (Anthropic requirement)
-     * and omits top_p, top_k, and min_p which are incompatible with thinking mode.
-     * min_p is always omitted as Anthropic does not support it.
-     *
-     * @param string $systemPrompt The system prompt
-     * @param string $prompt The user message
-     * @param bool $useTools Whether to enable tool calling
-     * @return string The response text
-     */
-    private function callAnthropicAPI($systemPrompt, $prompt, $useTools = false)
-    {
-        $data = [
-            'model'      => $this->anthropic_model,
-            'max_tokens' => 6144,
-            'system'     => $systemPrompt,
-            'messages'   => [
-                ['role' => 'user', 'content' => $prompt]
-            ],
-        ];
-
-        if ($this->think) {
-            // Anthropic requires temperature=1.0 when extended thinking is enabled;
-            // top_p, top_k, and min_p must not be sent in this mode.
-            $data['thinking'] = [
-                'type'          => 'enabled',
-                'budget_tokens' => 5000,
-            ];
-            $data['temperature'] = 1.0;
-        } else {
-            if ($this->temperature !== null) {
-                $data['temperature'] = $this->temperature;
-            }
-            if ($this->top_p !== null) {
-                $data['top_p'] = $this->top_p;
-            }
-            if ($this->top_k !== null) {
-                $data['top_k'] = $this->top_k;
-            }
-            // min_p is not a valid Anthropic parameter; always omitted
-        }
-
-        if ($useTools) {
-            $data['tools'] = $this->getAnthropicTools();
-        }
-
-        return $this->callAnthropicAPIWithTools($data, false, $useTools);
-    }
-
-    /**
-     * Convert OpenAI-format tool definitions to Anthropic format
-     *
-     * Anthropic tools are flat objects with name, description, and input_schema,
-     * whereas OpenAI wraps them in a type:'function' envelope with a parameters key.
-     *
-     * @return array Anthropic-format tool definitions
-     */
-    private function getAnthropicTools()
-    {
-        $anthropicTools = [];
-        foreach ($this->getAvailableTools() as $tool) {
-            $fn = $tool['function'];
-            $anthropicTools[] = [
-                'name'         => $fn['name'],
-                'description'  => $fn['description'],
-                'input_schema' => $fn['parameters'],
-            ];
-        }
-        return $anthropicTools;
-    }
-
-    /**
-     * Execute an Anthropic API call, handling tool use recursively
-     *
-     * Sends the request to https://api.anthropic.com/v1/messages, parses the
-     * typed content blocks in the response (text, thinking, tool_use), and
-     * recurses when tool calls are present until a final text response is received.
-     *
-     * Applies the same loop-protection limits as the OpenAI path:
-     * - max 3 calls per individual tool
-     * - max 10 total tool calls across all tools
-     *
-     * @param array $data The full request body
-     * @param bool $toolsCalled Whether the loop limit has been hit (strips tools on true)
-     * @param bool $useTools Whether to process tool_use blocks
-     * @return string The final text content
-     * @throws Exception On HTTP or format errors
-     */
-    private function callAnthropicAPIWithTools($data, $toolsCalled = false, $useTools = true)
-    {
-        $headers = [
-            'Content-Type: application/json',
-            'x-api-key: ' . $this->anthropic_api_key,
-            'anthropic-version: 2023-06-01',
-        ];
-
-        // Remove tools from the request when loop limit is reached
-        if ($toolsCalled) {
-            unset($data['tools']);
-        }
-
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, 'https://api.anthropic.com/v1/messages');
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error    = curl_error($ch);
-        curl_close($ch);
-
-        if ($error) {
-            throw new Exception('Anthropic API request failed: ' . $error);
-        }
-        if ($httpCode !== 200) {
-            throw new Exception('Anthropic API request failed with HTTP code: ' . $httpCode . ' - ' . $response);
-        }
-
-        $result = json_decode($response, true);
-
-        // Parse typed content blocks
-        $textContent   = '';
-        $toolUseBlocks = [];
-        foreach ($result['content'] ?? [] as $block) {
-            if ($block['type'] === 'text') {
-                $textContent .= $block['text'];
-            } elseif ($block['type'] === 'tool_use') {
-                $toolUseBlocks[] = $block;
-            }
-            // 'thinking' blocks are intentionally ignored; the JS layer handles
-            // <think> tag stripping on the OpenAI path; Anthropic thinking is internal.
-        }
-
-        // Final text response
-        if (!empty($textContent) && empty($toolUseBlocks)) {
-            $this->toolCallCounts = [];
-            return $textContent;
-        }
-
-        // Tool use response — bundle all results into one user message
-        if ($useTools && !empty($toolUseBlocks) && ($result['stop_reason'] ?? '') === 'tool_use') {
-            $messages = $data['messages'];
-
-            // Append the full assistant turn (contains tool_use blocks)
-            $messages[] = [
-                'role'    => 'assistant',
-                'content' => $result['content'],
-            ];
-
-            // Build one user message containing all tool_result content blocks
-            $toolResultBlocks = [];
-            foreach ($toolUseBlocks as $toolUseBlock) {
-                $toolName = $toolUseBlock['name'];
-
-                if (!isset($this->toolCallCounts[$toolName])) {
-                    $this->toolCallCounts[$toolName] = 0;
-                }
-                $this->toolCallCounts[$toolName]++;
-
-                $toolResultBlocks[] = $this->handleToolCallAnthropic($toolUseBlock);
-            }
-
-            $messages[] = [
-                'role'    => 'user',
-                'content' => $toolResultBlocks,
-            ];
-
-            // Check loop-protection limits
-            $toolsCalledCount = 0;
-            foreach ($this->toolCallCounts as $count) {
-                if ($count > 3) {
-                    $toolsCalled = true;
-                    break;
-                }
-                $toolsCalledCount += $count;
-            }
-            if ($toolsCalledCount > 10) {
-                $toolsCalled = true;
-            }
-
-            $data['messages'] = $messages;
-            return $this->callAnthropicAPIWithTools($data, $toolsCalled, $useTools);
-        }
-
-        throw new Exception('Unexpected Anthropic API response format');
-    }
-
-    /**
-     * Dispatch an Anthropic tool_use block and return a tool_result content block
-     *
-     * Parallel to handleToolCall() for the OpenAI path. Reuses the same
-     * $toolCallCache store with an identical MD5 key so results are shared
-     * across both provider paths within a single request.
-     *
-     * Unlike the OpenAI path, Anthropic's input is already a decoded array
-     * (not a JSON string), and the result format is a tool_result content block
-     * rather than a role:tool message.
-     *
-     * @param array $toolUseBlock A tool_use content block from the Anthropic response
-     * @return array A tool_result content block ready to include in a user message
-     */
-    private function handleToolCallAnthropic($toolUseBlock)
-    {
-        $toolName  = $toolUseBlock['name'];
-        $arguments = $toolUseBlock['input'];   // already decoded array, not a JSON string
-
-        $cacheKey = md5($toolName . serialize($arguments));
-
-        if (isset($this->toolCallCache[$cacheKey])) {
-            $content = $this->toolCallCache[$cacheKey]['content'];
-        } else {
-            switch ($toolName) {
-                case 'get_document':
-                    $pageContent = $this->getPageContent($arguments['id']);
-                    $content = ($pageContent === false)
-                        ? 'Document not found: ' . $arguments['id']
-                        : $pageContent;
-                    break;
-
-                case 'get_template':
-                    $content = $this->getTemplateContent();
-                    break;
-
-                case 'get_examples':
-                    $count = isset($arguments['count']) ? (int)$arguments['count'] : 5;
-                    $content = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
-                    break;
-
-                default:
-                    $content = 'Unknown tool: ' . $toolName;
-            }
-
-            $this->toolCallCache[$cacheKey] = ['content' => $content];
-        }
-
-        return [
-            'type'        => 'tool_result',
-            'tool_use_id' => $toolUseBlock['id'],
-            'content'     => $content,
-        ];
-    }
-
-    /**
-     * Handle tool calls from the LLM
-     *
-     * Processes tool calls made by the LLM and returns appropriate responses.
-     * Implements caching to avoid duplicate calls with identical parameters.
-     *
-     * @param array $toolCall The tool call data from the LLM
-     * @return array The tool response message
-     */
-    private function handleToolCall($toolCall)
-    {
-        $toolName = $toolCall['function']['name'];
-        $arguments = json_decode($toolCall['function']['arguments'], true);
-
-        // Create a cache key from the tool name and arguments
-        $cacheKey = md5($toolName . serialize($arguments));
-
-        // Check if we have a cached result for this tool call
-        if (isset($this->toolCallCache[$cacheKey])) {
-            // Return cached result and indicate it was found in cache
-            $toolResponse = $this->toolCallCache[$cacheKey];
-            // Update with current tool call ID
-            $toolResponse['tool_call_id'] = $toolCall['id'];
-            $toolResponse['cached'] = true; // Indicate this response was cached
-            return $toolResponse;
-        }
-
-        $toolResponse = [
-            'role' => 'tool',
-            'tool_call_id' => $toolCall['id'],
-            'cached' => false // Indicate this is a fresh response
-        ];
-
-        switch ($toolName) {
-            case 'get_document':
-                $documentId = $arguments['id'];
-                $content = $this->getPageContent($documentId);
-                if ($content === false) {
-                    $toolResponse['content'] = 'Document not found: ' . $documentId;
-                } else {
-                    $toolResponse['content'] = $content;
-                }
-                break;
-
-            case 'get_template':
-                // Get template content using the convenience function
-                $toolResponse['content'] = $this->getTemplateContent();
-                break;
-
-            case 'get_examples':
-                // Get examples content using the convenience function
-                $count = isset($arguments['count']) ? (int)$arguments['count'] : 5;
-                $toolResponse['content'] = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
-                break;
-
-            default:
-                $toolResponse['content'] = 'Unknown tool: ' . $toolName;
-        }
-
-        // Cache the result for future calls with the same parameters
-        $cacheEntry = $toolResponse;
-        // Remove tool_call_id and cached flag from cache as they change per call
-        unset($cacheEntry['tool_call_id']);
-        unset($cacheEntry['cached']);
-        $this->toolCallCache[$cacheKey] = $cacheEntry;
-
-        return $toolResponse;
-    }
+    // =========================================================================
+    // Shared helpers
+    // =========================================================================
 
     /**
      * Load a prompt template from a DokuWiki page and replace placeholders
