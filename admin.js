@@ -4,6 +4,14 @@
  * Adds a refresh button and datalist to each model text input on the
  * DokuWiki config manager page so the admin can pick a model from a
  * live-fetched dropdown instead of typing it manually.
+ *
+ * DokuWiki generates config field names as:
+ *   config[plugin____PLUGINNAME____KEY]   (KEYMARKER = '____', 4 underscores)
+ * and IDs as:
+ *   config___plugin____PLUGINNAME____KEY  (3-underscore prefix, then the key)
+ *
+ * Rather than hardcoding separators, we locate inputs via partial name
+ * attribute matching so this works regardless of DokuWiki version.
  */
 (function () {
     'use strict';
@@ -36,10 +44,12 @@
                         datalist.appendChild(opt);
                     });
                     button.textContent = '✓';
-                    button.title = data.models.length + ' models loaded';
+                    button.title = data.models.length + ' models loaded — click to refresh';
+                    console.log('[DokuLLM] ' + provider + ': loaded ' + data.models.length + ' models');
                 } else if (data.error) {
                     button.textContent = '✗';
                     button.title = data.error;
+                    console.warn('[DokuLLM] ' + provider + ' fetch error: ' + data.error);
                 } else {
                     button.textContent = '✗';
                     button.title = 'No models returned';
@@ -48,29 +58,48 @@
             .catch(function (err) {
                 button.textContent = '✗';
                 button.title = String(err);
+                console.warn('[DokuLLM] ' + provider + ' fetch failed: ' + err);
             })
             .finally(function () {
                 button.disabled = false;
-                // Reset icon after a moment so the user can refresh again
                 setTimeout(function () {
-                    button.textContent = '↻';
-                }, 3000);
+                    if (button.textContent !== '✓') {
+                        button.textContent = '↻';
+                        button.title = 'Fetch available models from the provider';
+                    }
+                }, 4000);
             });
     }
 
     /**
-     * Attach datalist + refresh button to a single config text input.
+     * Find a plugin config input by partial name matching.
+     * DokuWiki generates names as config[plugin____dokullm____KEY].
+     * Using [name*="..."] avoids hardcoding the exact separator.
      *
-     * @param {string} inputId    Element ID of the <input> in the config form
-     * @param {string} provider   Provider name passed to the AJAX endpoint
+     * @param {string} key  The config key suffix, e.g. 'openai_model'
+     * @returns {HTMLElement|null}
      */
-    function setupModelField(inputId, provider) {
-        var input = document.getElementById(inputId);
-        if (!input) return;
+    function findInput(key) {
+        return document.querySelector('input[name*="dokullm"][name*="' + key + '"]');
+    }
+
+    /**
+     * Attach a datalist + refresh button to a model text input.
+     *
+     * @param {string} key       Config key suffix ('openai_model', etc.)
+     * @param {string} provider  Provider name for the AJAX call
+     */
+    function setupModelField(key, provider) {
+        var input = findInput(key);
+        if (!input) {
+            console.log('[DokuLLM] config input not found for key: ' + key);
+            return;
+        }
+        console.log('[DokuLLM] setting up model picker for ' + provider + ' (id=' + input.id + ')');
 
         // Datalist for browser-native dropdown suggestions
         var datalist = document.createElement('datalist');
-        datalist.id = inputId + '__datalist';
+        datalist.id = input.id + '__datalist';
         input.setAttribute('list', datalist.id);
         input.after(datalist);
 
@@ -88,9 +117,9 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        // DokuWiki config manager generates IDs as config___plugin___PLUGIN___KEY
-        setupModelField('config___plugin___dokullm___openai_model',    'openai');
-        setupModelField('config___plugin___dokullm___anthropic_model', 'anthropic');
-        setupModelField('config___plugin___dokullm___ollama_model',    'ollama');
+        console.log('[DokuLLM] admin.js loaded');
+        setupModelField('openai_model',    'openai');
+        setupModelField('anthropic_model', 'anthropic');
+        setupModelField('ollama_model',    'ollama');
     });
 }());
