@@ -1,0 +1,228 @@
+# DokuLLM Plugin — Codebase Notes
+
+## Overview
+
+DokuLLM is a DokuWiki plugin that integrates Large Language Model (LLM) capabilities with semantic search via ChromaDB. It adds an editor toolbar with AI-powered text-processing actions (create, rewrite, summarize, etc.) and supports vector-based document search using Ollama embeddings.
+
+- **Plugin ID**: `dokullm`
+- **Author**: Costin Stroie <costinstroie@eridu.eu.org>
+- **License**: GPL 2.0
+- **Minimum PHP**: 7.4
+
+---
+
+## File Map
+
+| File | Role |
+|---|---|
+| `action.php` | Main DokuWiki action plugin — event hooks, AJAX routing, template handling, ChromaDB page indexing |
+| `LlmClient.php` | OpenAI-compatible API client — prompt loading, tool calls, ChromaDB queries |
+| `ChromaDBClient.php` | ChromaDB v2 REST client — collection management, Ollama embedding generation, document chunking/indexing |
+| `cli.php` | DokuWiki CLI plugin — batch `send`/`query`/`get`/`list`/`heartbeat`/`identity` commands |
+| `MenuItem.php` | Page-tools menu item for the "Copy page" button |
+| `script.js` | Frontend toolbar — fetches actions, sends AJAX requests, handles result modes |
+| `style.css` | Toolbar and modal CSS |
+| `conf/default.php` | Default config values |
+| `conf/metadata.php` | Config field types for the DokuWiki admin UI |
+| `lang/en/lang.php` | English strings (PHP + JS via `$lang['js'][...]`) |
+| `lang/ro/lang.php` | Romanian strings |
+| `doc/prompts.txt` | Prompt system and namespace documentation |
+| `doc/llm.txt` | Additional LLM documentation |
+
+---
+
+## Architecture
+
+### Request Flow (Editor → LLM)
+
+1. Page loads → `action.php::handleDokuwikiStarted` injects config into `JSINFO.plugins.dokullm`
+2. Edit page → `action.php::handleMetaHeaders` injects `script.js`
+3. User clicks a toolbar button → `script.js` POSTs to `lib/exe/ajax.php?call=plugin_dokullm`
+4. `action.php::handleAjax` routes to `processRequest()`
+5. `processRequest()` instantiates `LlmClient` (and optionally `ChromaDBClient`) then calls `LlmClient::process()`
+6. `LlmClient::process()` loads prompt from DokuWiki page, calls the LLM API, optionally handles tool calls
+7. JSON result returned to JS; JS updates the editor textarea
+
+### Page Indexing Flow
+
+`INDEXER_TASKS_RUN` hook → `handlePageSave()` → `sendPageToChromaDB()` → `ChromaDBClient::processSingleFile()`
+
+---
+
+## Configuration Keys (`conf/default.php`)
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `api_url` | string | OpenAI chat completions URL | Any OpenAI-compatible endpoint |
+| `api_key` | password | `''` | Bearer token; empty = no auth |
+| `model` | string | `gpt-3.5-turbo` | Model ID sent to API |
+| `timeout` | int | `30` | cURL timeout in seconds (min 5) |
+| `profile` | string | `default` | Controls which `dokullm:profiles:PROFILE:` namespace is used |
+| `temperature` | float | `0.3` | 0.0–1.0 |
+| `top_p` | float | `0.8` | 0.0–1.0 |
+| `top_k` | int | `20` | ≥ 1 |
+| `min_p` | float | `0.0` | 0.0–1.0 |
+| `think` | bool | `false` | Sends `think: true` in API payload; strips `<think>` tags from response |
+| `tools` | bool | `false` | Enables `get_document`, `get_template`, `get_examples` tool calls |
+| `show_copy_button` | bool | `true` | Show "Copy page" in page tools |
+| `replace_id` | bool | `true` | Replace template page ID in copied content |
+| `enable_chromadb` | bool | `false` | Master switch for all ChromaDB features |
+| `chroma_host` | string | `127.0.0.1` | |
+| `chroma_port` | int | `8000` | |
+| `chroma_tenant` | string | `dokullm` | |
+| `chroma_database` | string | `dokullm` | |
+| `chroma_collection` | string | `documents` | Default collection |
+| `ollama_host` | string | `127.0.0.1` | |
+| `ollama_port` | int | `11434` | |
+| `ollama_embeddings_model` | string | `nomic-embed-text` | Used for embedding generation |
+
+---
+
+## Prompt System
+
+Prompts are stored as **DokuWiki pages** in the `dokullm:` namespace, not as files in the plugin.
+
+### Namespace layout
+
+```
+dokullm:profiles:
+└── {PROFILE}/
+    ├── (index page)       ← action definitions table
+    ├── system             ← base system prompt
+    ├── {ACTION}           ← user-message prompt for each action
+    └── system:{ACTION}    ← optional system prompt appendage per action
+```
+
+### Action definitions table
+
+The profile index page (`dokullm:profiles:PROFILE`) contains a DokuWiki table with columns:
+
+`| ID | Label | Description | Icon | Result |`
+
+- **ID**: action name (or a `[[link]]` to a sub-page — last colon-segment is used)
+- **Result**: `show` | `append` | `replace` | `insert`
+- Parsing stops after the first table ends
+
+### Prompt placeholders
+
+`{text}`, `{template}`, `{examples}`, `{snippets}`, `{previous}`, `{prompt}`, `{current_date}`, `{previous_date}`, `{action}`, `{think}`
+
+### Prompt loading fallback
+
+1. Try `dokullm:profiles:{PROFILE}:{ACTION}`
+2. Fall back to `dokullm:profile:default:{ACTION}` (note the typo — `profile` not `profiles`)
+3. Throw exception if neither exists
+
+---
+
+## Page Metadata Directives
+
+These are embedded in DokuWiki page content and parsed by `script.js`:
+
+| Directive | Purpose |
+|---|---|
+| `~~LLM_TEMPLATE:page_id~~` | Associate a template page |
+| `~~LLM_EXAMPLES:id1,id2~~` | Reference example pages |
+| `~~LLM_PREVIOUS:page_id~~` | Reference a previous report |
+
+When a page is copied from a template whose ID contains the word `template`, `~~LLM_TEMPLATE:template_id~~` is automatically inserted after the first title line.
+
+---
+
+## ChromaDB Document ID Format
+
+Documents are indexed with IDs derived from the DokuWiki page ID:
+
+```
+reports:mri:institution:250620-name-surname  →  Format 1 (institution-based)
+reports:mri:2024:g287-name-surname           →  Format 2 (year-based)
+reports:mri:templates:name                   →  Template (type=template metadata)
+```
+
+Chunks are indexed as `{dokuwiki_id}@{paragraph_index}`. The collection name is taken from the **first** colon-segment of the page ID.
+
+Metadata stored per chunk: `document_id`, `processed_at`, `type` (`report`|`template`), `modality`, `institution`/`year`, `name`, `registration`, `date`, `chunk_id`, `chunk_number`, `total_chunks`, `tags`.
+
+---
+
+## LLM Tool Calls
+
+When `tools = true`, the LLM can call three tools:
+
+| Tool | Description |
+|---|---|
+| `get_document` | Fetch a DokuWiki page by ID |
+| `get_template` | Retrieve the best-matching template from ChromaDB |
+| `get_examples` | Retrieve N example snippets from ChromaDB |
+
+Loop protection:
+- Each individual tool is capped at **3 calls**
+- Total tool calls capped at **10**
+- When limits hit, tools are stripped from the next API call to force a final answer
+
+---
+
+## CLI Usage
+
+```
+./bin/plugin.php dokullm send <path>           # index file or directory into ChromaDB
+./bin/plugin.php dokullm query <search terms>
+./bin/plugin.php dokullm get <document_id>
+./bin/plugin.php dokullm list
+./bin/plugin.php dokullm heartbeat
+./bin/plugin.php dokullm identity
+# Add -v for verbose output
+```
+
+---
+
+## Known Issues / Technical Debt
+
+### Bugs
+
+1. **`LlmClient.php:881–882`** — Dead code and undefined variable:
+   ```php
+   $chromaCollection = 'reports';
+   $pageId = $pageId;  // FIXME: $pageId is not defined in this scope
+   ```
+   `getChromaDBClient()` has a hardcoded `'reports'` fallback that is never actually used (overwritten by the if-block below it).
+
+2. **Config key mismatch** — `conf/metadata.php:135` defines `$meta['use_tools']` but the actual config key used throughout the code is `tools`. The admin UI will show `use_tools` but it has no effect; `tools` is what is read.
+
+3. **`cli.php:71`** — Calls `$this->getConf('ollama_model')` but the config key is `ollama_embeddings_model`. The CLI `query`, `heartbeat`, etc. commands will fail to read the correct Ollama model.
+
+4. **Fallback profile path typo** — `LlmClient.php:537` falls back to `dokullm:profile:default:{ACTION}` (singular `profile`) instead of `dokullm:profiles:default:{ACTION}` (plural). The fallback will always fail silently.
+
+5. **`action.php:291`** — `$ID` (global DokuWiki page ID) is passed to `LlmClient` constructor but is not declared `global` in `processRequest()`. PHP will use an undefined variable; the page ID will be `null`.
+
+### Disabled Code
+
+- `handleToolbar()` in `action.php` is implemented but its `register_hook` call is commented out (line 60). This means the DokuWiki native toolbar integration is inactive; the plugin uses its own custom toolbar div instead.
+
+### Minor Issues
+
+- `ChromaDBClient::processSingleFile()` — the `total_chunks` metadata stores the total number of paragraphs *before* empty ones are filtered, not the actual number of chunks stored.
+- The `style.css` / `images/` directory is minimal; icons rely on emoji or DokuWiki's own image library via a base URL injected from JS.
+
+---
+
+## Event Hooks Registered
+
+| Hook | When | Handler |
+|---|---|---|
+| `DOKUWIKI_STARTED` | AFTER | Inject config into `JSINFO` |
+| `TPL_METAHEADER_OUTPUT` | BEFORE | Inject `script.js` on edit/preview pages |
+| `AJAX_CALL_UNKNOWN` | BEFORE | Handle `plugin_dokullm` AJAX calls |
+| `COMMON_PAGETPL_LOAD` | BEFORE | Handle `copyfrom` template loading |
+| `MENU_ITEMS_ASSEMBLY` | AFTER | Add "Copy page" menu item |
+| `INDEXER_TASKS_RUN` | AFTER | Index saved pages into ChromaDB |
+
+---
+
+## External Dependencies (Runtime)
+
+- **ChromaDB** v2 API — vector database
+- **Ollama** — local embedding generation (`/api/embeddings`)
+- **Any OpenAI-compatible LLM API** — text generation
+
+All communication uses `cURL` directly (no Composer packages).
