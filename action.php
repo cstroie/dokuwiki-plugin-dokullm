@@ -286,6 +286,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             $this->getConf('min_p'),
             $this->getConf('think', false),
             $this->getConf('tools', false),
+            $this->getConf('provider', 'openai'),
             $this->getConf('profile', 'default'),
             $chromaClient,
             $ID
@@ -451,6 +452,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 $this->getConf('min_p'),
                 $this->getConf('think', false),
                 $this->getConf('tools', false),
+                $this->getConf('provider', 'openai'),
                 $this->getConf('profile', 'default'),
                 $chromaClient,
                 $ID

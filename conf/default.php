@@ -7,11 +7,23 @@
  */
 
 /**
+ * The LLM provider to use
+ *
+ * Selects the API provider. 'openai' works with any OpenAI-compatible endpoint
+ * (OpenAI, Ollama, LM Studio, etc.). 'anthropic' uses Anthropic's native Messages
+ * API directly; in this case api_url is ignored.
+ *
+ * @var string
+ */
+$conf['provider'] = 'openai';
+
+/**
  * The API endpoint URL for the LLM service
- * 
+ *
  * This should be the full URL to the chat completions endpoint of your LLM provider.
  * The default is set to OpenAI's GPT API endpoint.
- * 
+ * Not used when provider is 'anthropic'.
+ *
  * @var string
  */
 $conf['api_url'] = 'https://api.openai.com/v1/chat/completions';

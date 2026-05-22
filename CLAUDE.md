@@ -187,7 +187,7 @@ Loop protection:
    ```
    `getChromaDBClient()` has a hardcoded `'reports'` fallback that is never actually used (overwritten by the if-block below it).
 
-2. **Config key mismatch** — `conf/metadata.php:135` defines `$meta['use_tools']` but the actual config key used throughout the code is `tools`. The admin UI will show `use_tools` but it has no effect; `tools` is what is read.
+2. ~~**Config key mismatch**~~ — Fixed: `$meta['use_tools']` renamed to `$meta['tools']` to match the actual config key; `lang/en/settings.php` and `lang/ro/settings.php` updated accordingly.
 
 3. **`cli.php:71`** — Calls `$this->getConf('ollama_model')` but the config key is `ollama_embeddings_model`. The CLI `query`, `heartbeat`, etc. commands will fail to read the correct Ollama model.
 

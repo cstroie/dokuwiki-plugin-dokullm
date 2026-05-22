@@ -4,7 +4,8 @@
  *
  */
 
-$lang['api_url'] = 'LLM API Endpoint URL';
+$lang['provider'] = 'LLM Provider (openai = any OpenAI-compatible API; anthropic = Anthropic native API)';
+$lang['api_url'] = 'LLM API Endpoint URL (not used when provider is set to anthropic)';
 $lang['api_key'] = 'API Key for authentication with the LLM service';
 $lang['model'] = 'Model name to use for text processing';
 $lang['timeout'] = 'Request Timeout (seconds)';
@@ -16,7 +17,7 @@ $lang['min_p'] = 'Min-P - Minimum probability threshold for token selection';
 $lang['show_copy_button'] = 'Show Copy Page Button in the toolbar';
 $lang['replace_id'] = 'Replace Template ID When Copying';
 $lang['think'] = 'Enable Thinking in LLM Responses for deeper processing';
-$lang['use_tools'] = 'Enable Tool Usage in LLM Responses for enhanced capabilities';
+$lang['tools'] = 'Enable Tool Usage in LLM Responses for enhanced capabilities';
 $lang['enable_chromadb'] = 'Enable ChromaDB Integration - When enabled, ChromaDB features will be available for document storage and retrieval';
 $lang['chroma_host'] = 'ChromaDB Host - The hostname or IP address of your ChromaDB server';
 $lang['chroma_port'] = 'ChromaDB Port - The port number on which ChromaDB is running';

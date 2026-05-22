@@ -67,6 +67,9 @@ class LlmClient
     /** @var bool Whether to enable thinking in LLM responses */
     private $think;
 
+    /** @var string The API provider: 'openai' or 'anthropic' */
+    private $provider;
+
     /** @var object|null ChromaDB client instance */
     private $chromaClient;
 
@@ -93,7 +96,7 @@ class LlmClient
      * - chromaClient: ChromaDB client instance (optional)
      * - pageId: Page ID (optional)
      */
-    public function __construct($api_url = null, $api_key = null, $model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $profile = null, $chromaClient = null, $pageId = null)
+    public function __construct($api_url = null, $api_key = null, $model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $provider = 'openai', $profile = null, $chromaClient = null, $pageId = null)
     {
         $this->api_url = $api_url;
         $this->api_key = $api_key;
@@ -105,6 +108,7 @@ class LlmClient
         $this->min_p = $min_p;
         $this->think = $think;
         $this->tools = $tools;
+        $this->provider = $provider ?? 'openai';
         $this->profile = $profile;
         $this->chromaClient = $chromaClient;
         $this->pageId = $pageId;
@@ -260,6 +264,11 @@ class LlmClient
     {
         // Load system prompt which provides general instructions to the LLM
         $systemPrompt = $this->loadSystemPrompt($command, []);
+
+        // Dispatch to the appropriate provider
+        if ($this->provider === 'anthropic') {
+            return $this->callAnthropicAPI($systemPrompt, $prompt, $useTools);
+        }
 
         // Prepare API request data with model parameters
         $data = [
@@ -429,6 +438,257 @@ class LlmClient
 
         // Throw exception for unexpected response format
         throw new Exception('Unexpected API response format');
+    }
+
+    /**
+     * Build and send a request to Anthropic's native Messages API
+     *
+     * Entry point for the Anthropic provider path. Constructs the request body
+     * in Anthropic format and delegates to callAnthropicAPIWithTools().
+     *
+     * When think is enabled, forces temperature to 1.0 (Anthropic requirement)
+     * and omits top_p, top_k, and min_p which are incompatible with thinking mode.
+     * min_p is always omitted as Anthropic does not support it.
+     *
+     * @param string $systemPrompt The system prompt
+     * @param string $prompt The user message
+     * @param bool $useTools Whether to enable tool calling
+     * @return string The response text
+     */
+    private function callAnthropicAPI($systemPrompt, $prompt, $useTools = false)
+    {
+        $data = [
+            'model'      => $this->model,
+            'max_tokens' => 6144,
+            'system'     => $systemPrompt,
+            'messages'   => [
+                ['role' => 'user', 'content' => $prompt]
+            ],
+        ];
+
+        if ($this->think) {
+            // Anthropic requires temperature=1.0 when extended thinking is enabled;
+            // top_p, top_k, and min_p must not be sent in this mode.
+            $data['thinking'] = [
+                'type'          => 'enabled',
+                'budget_tokens' => 5000,
+            ];
+            $data['temperature'] = 1.0;
+        } else {
+            if ($this->temperature !== null) {
+                $data['temperature'] = $this->temperature;
+            }
+            if ($this->top_p !== null) {
+                $data['top_p'] = $this->top_p;
+            }
+            if ($this->top_k !== null) {
+                $data['top_k'] = $this->top_k;
+            }
+            // min_p is not a valid Anthropic parameter; always omitted
+        }
+
+        if ($useTools) {
+            $data['tools'] = $this->getAnthropicTools();
+        }
+
+        return $this->callAnthropicAPIWithTools($data, false, $useTools);
+    }
+
+    /**
+     * Convert OpenAI-format tool definitions to Anthropic format
+     *
+     * Anthropic tools are flat objects with name, description, and input_schema,
+     * whereas OpenAI wraps them in a type:'function' envelope with a parameters key.
+     *
+     * @return array Anthropic-format tool definitions
+     */
+    private function getAnthropicTools()
+    {
+        $anthropicTools = [];
+        foreach ($this->getAvailableTools() as $tool) {
+            $fn = $tool['function'];
+            $anthropicTools[] = [
+                'name'         => $fn['name'],
+                'description'  => $fn['description'],
+                'input_schema' => $fn['parameters'],
+            ];
+        }
+        return $anthropicTools;
+    }
+
+    /**
+     * Execute an Anthropic API call, handling tool use recursively
+     *
+     * Sends the request to https://api.anthropic.com/v1/messages, parses the
+     * typed content blocks in the response (text, thinking, tool_use), and
+     * recurses when tool calls are present until a final text response is received.
+     *
+     * Applies the same loop-protection limits as the OpenAI path:
+     * - max 3 calls per individual tool
+     * - max 10 total tool calls across all tools
+     *
+     * @param array $data The full request body
+     * @param bool $toolsCalled Whether the loop limit has been hit (strips tools on true)
+     * @param bool $useTools Whether to process tool_use blocks
+     * @return string The final text content
+     * @throws Exception On HTTP or format errors
+     */
+    private function callAnthropicAPIWithTools($data, $toolsCalled = false, $useTools = true)
+    {
+        $headers = [
+            'Content-Type: application/json',
+            'x-api-key: ' . $this->api_key,
+            'anthropic-version: 2023-06-01',
+        ];
+
+        // Remove tools from the request when loop limit is reached
+        if ($toolsCalled) {
+            unset($data['tools']);
+        }
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, 'https://api.anthropic.com/v1/messages');
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error    = curl_error($ch);
+        curl_close($ch);
+
+        if ($error) {
+            throw new Exception('Anthropic API request failed: ' . $error);
+        }
+        if ($httpCode !== 200) {
+            throw new Exception('Anthropic API request failed with HTTP code: ' . $httpCode . ' - ' . $response);
+        }
+
+        $result = json_decode($response, true);
+
+        // Parse typed content blocks
+        $textContent   = '';
+        $toolUseBlocks = [];
+        foreach ($result['content'] ?? [] as $block) {
+            if ($block['type'] === 'text') {
+                $textContent .= $block['text'];
+            } elseif ($block['type'] === 'tool_use') {
+                $toolUseBlocks[] = $block;
+            }
+            // 'thinking' blocks are intentionally ignored; the JS layer handles
+            // <think> tag stripping on the OpenAI path; Anthropic thinking is internal.
+        }
+
+        // Final text response
+        if (!empty($textContent) && empty($toolUseBlocks)) {
+            $this->toolCallCounts = [];
+            return $textContent;
+        }
+
+        // Tool use response — bundle all results into one user message
+        if ($useTools && !empty($toolUseBlocks) && ($result['stop_reason'] ?? '') === 'tool_use') {
+            $messages = $data['messages'];
+
+            // Append the full assistant turn (contains tool_use blocks)
+            $messages[] = [
+                'role'    => 'assistant',
+                'content' => $result['content'],
+            ];
+
+            // Build one user message containing all tool_result content blocks
+            $toolResultBlocks = [];
+            foreach ($toolUseBlocks as $toolUseBlock) {
+                $toolName = $toolUseBlock['name'];
+
+                if (!isset($this->toolCallCounts[$toolName])) {
+                    $this->toolCallCounts[$toolName] = 0;
+                }
+                $this->toolCallCounts[$toolName]++;
+
+                $toolResultBlocks[] = $this->handleToolCallAnthropic($toolUseBlock);
+            }
+
+            $messages[] = [
+                'role'    => 'user',
+                'content' => $toolResultBlocks,
+            ];
+
+            // Check loop-protection limits
+            $toolsCalledCount = 0;
+            foreach ($this->toolCallCounts as $count) {
+                if ($count > 3) {
+                    $toolsCalled = true;
+                    break;
+                }
+                $toolsCalledCount += $count;
+            }
+            if ($toolsCalledCount > 10) {
+                $toolsCalled = true;
+            }
+
+            $data['messages'] = $messages;
+            return $this->callAnthropicAPIWithTools($data, $toolsCalled, $useTools);
+        }
+
+        throw new Exception('Unexpected Anthropic API response format');
+    }
+
+    /**
+     * Dispatch an Anthropic tool_use block and return a tool_result content block
+     *
+     * Parallel to handleToolCall() for the OpenAI path. Reuses the same
+     * $toolCallCache store with an identical MD5 key so results are shared
+     * across both provider paths within a single request.
+     *
+     * Unlike the OpenAI path, Anthropic's input is already a decoded array
+     * (not a JSON string), and the result format is a tool_result content block
+     * rather than a role:tool message.
+     *
+     * @param array $toolUseBlock A tool_use content block from the Anthropic response
+     * @return array A tool_result content block ready to include in a user message
+     */
+    private function handleToolCallAnthropic($toolUseBlock)
+    {
+        $toolName  = $toolUseBlock['name'];
+        $arguments = $toolUseBlock['input'];   // already decoded array, not a JSON string
+
+        $cacheKey = md5($toolName . serialize($arguments));
+
+        if (isset($this->toolCallCache[$cacheKey])) {
+            $content = $this->toolCallCache[$cacheKey]['content'];
+        } else {
+            switch ($toolName) {
+                case 'get_document':
+                    $pageContent = $this->getPageContent($arguments['id']);
+                    $content = ($pageContent === false)
+                        ? 'Document not found: ' . $arguments['id']
+                        : $pageContent;
+                    break;
+
+                case 'get_template':
+                    $content = $this->getTemplateContent();
+                    break;
+
+                case 'get_examples':
+                    $count = isset($arguments['count']) ? (int)$arguments['count'] : 5;
+                    $content = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                    break;
+
+                default:
+                    $content = 'Unknown tool: ' . $toolName;
+            }
+
+            $this->toolCallCache[$cacheKey] = ['content' => $content];
+        }
+
+        return [
+            'type'        => 'tool_result',
+            'tool_use_id' => $toolUseBlock['id'],
+            'content'     => $content,
+        ];
     }
 
     /**

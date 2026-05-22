@@ -4,7 +4,8 @@
  *
  */
 
-$lang['api_url']                = 'URL endpoint API LLM';
+$lang['provider']               = 'Furnizor LLM (openai = orice API compatibil OpenAI; anthropic = API nativ Anthropic)';
+$lang['api_url']                = 'URL endpoint API LLM (neutilizat când furnizorul este anthropic)';
 $lang['api_key']                = 'Cheie API pentru autentificarea cu serviciul LLM';
 $lang['model']                  = 'Nume model utilizat pentru procesarea textului';
 $lang['timeout']                = 'Timeout cerere (secunde)';
@@ -16,7 +17,7 @@ $lang['min_p']                  = 'Min‑P – pragul minim de probabilitate pen
 $lang['show_copy_button']       = 'Afișează butonul „Copy Page” în bara de instrumente';
 $lang['replace_id']             = 'Înlocuiește ID‑ul șablonului la copiere';
 $lang['think']                  = 'Activează „Thinking” în răspunsurile LLM pentru procesare mai profundă';
-$lang['use_tools']              = 'Activează utilizarea instrumentelor în răspunsurile LLM pentru capabilități extinse';
+$lang['tools']                  = 'Activează utilizarea instrumentelor în răspunsurile LLM pentru capabilități extinse';
 $lang['enable_chromadb']        = 'Activează integrarea ChromaDB – când este activată, funcționalitățile ChromaDB vor fi disponibile pentru stocarea și recuperarea documentelor';
 $lang['chroma_host']            = 'Host ChromaDB – numele de gazdă sau adresa IP a serverului ChromaDB';
 $lang['chroma_port']            = 'Port ChromaDB – numărul portului pe care rulează ChromaDB';

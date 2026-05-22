@@ -7,10 +7,20 @@
  */
 
 /**
+ * Metadata for the provider configuration option
+ *
+ * Selects the LLM provider: 'openai' for any OpenAI-compatible API,
+ * 'anthropic' for Anthropic's native Messages API.
+ *
+ * @var array
+ */
+$meta['provider'] = array('multichoice', '_choices' => array('openai', 'anthropic'));
+
+/**
  * Metadata for the API URL configuration option
- * 
+ *
  * Defines the API endpoint URL as a string input field in the configuration interface.
- * 
+ *
  * @var array
  */
 $meta['api_url'] = array('string');
