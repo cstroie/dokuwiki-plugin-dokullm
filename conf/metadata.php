@@ -14,7 +14,7 @@
  *
  * @var array
  */
-$meta['provider'] = array('multichoice', '_choices' => array('openai', 'anthropic'));
+$meta['provider'] = array('multichoice', '_choices' => array('openai', 'anthropic', 'ollama'));
 
 /**
  * Metadata for the OpenAI API URL configuration option
@@ -223,10 +223,17 @@ $meta['ollama_host'] = array('string');
 $meta['ollama_port'] = array('numeric');
 
 /**
+ * Metadata for the Ollama LLM model configuration option
+ *
+ * @var array
+ */
+$meta['ollama_model'] = array('string');
+
+/**
  * Metadata for the Ollama embeddings model configuration option
- * 
+ *
  * Defines the Ollama embeddings model as a string input field in the configuration interface.
- * 
+ *
  * @var array
  */
 $meta['ollama_embeddings_model'] = array('string');

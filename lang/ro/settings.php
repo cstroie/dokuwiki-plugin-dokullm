@@ -28,4 +28,5 @@ $lang['chroma_database']        = 'Bază de date ChromaDB – numele bazei de da
 $lang['chroma_collection']      = 'Colecție ChromaDB – numele colecției implicite pentru stocarea documentelor';
 $lang['ollama_host']            = 'Host Ollama – numele de gazdă sau adresa IP a serverului Ollama';
 $lang['ollama_port']            = 'Port Ollama – numărul portului pe care rulează Ollama';
+$lang['ollama_model']           = 'Model LLM Ollama – modelul utilizat pentru generarea de text (furnizor = ollama)';
 $lang['ollama_embeddings_model']= 'Model embeddings Ollama – numele modelului utilizat pentru generarea de embeddings text';

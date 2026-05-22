@@ -53,7 +53,7 @@ DokuLLM is a DokuWiki plugin that integrates Large Language Model (LLM) capabili
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `provider` | multichoice | `openai` | `openai` = any OpenAI-compatible API; `anthropic` = Anthropic native API |
+| `provider` | multichoice | `openai` | `openai` = any OpenAI-compatible API; `anthropic` = Anthropic native API; `ollama` = Ollama native `/api/chat` |
 | `openai_api_url` | string | OpenAI chat completions URL | Any OpenAI-compatible endpoint; ignored when provider=anthropic |
 | `openai_api_key` | password | `''` | Bearer token; empty = no auth |
 | `openai_model` | string | `gpt-4o-mini` | Model ID for the OpenAI path |
@@ -75,9 +75,10 @@ DokuLLM is a DokuWiki plugin that integrates Large Language Model (LLM) capabili
 | `chroma_tenant` | string | `dokullm` | |
 | `chroma_database` | string | `dokullm` | |
 | `chroma_collection` | string | `documents` | Default collection |
-| `ollama_host` | string | `127.0.0.1` | |
-| `ollama_port` | int | `11434` | |
-| `ollama_embeddings_model` | string | `nomic-embed-text` | Used for embedding generation |
+| `ollama_host` | string | `127.0.0.1` | Shared by LLM and embeddings |
+| `ollama_port` | int | `11434` | Shared by LLM and embeddings |
+| `ollama_model` | string | `llama3.2` | LLM model for the Ollama provider path |
+| `ollama_embeddings_model` | string | `nomic-embed-text` | Used for embedding generation only |
 
 ---
 

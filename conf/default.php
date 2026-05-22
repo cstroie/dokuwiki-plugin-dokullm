@@ -254,11 +254,21 @@ $conf['ollama_host'] = '127.0.0.1';
 $conf['ollama_port'] = 11434;
 
 /**
+ * Ollama LLM model identifier
+ *
+ * Model used for text generation when provider is 'ollama'.
+ * Uses the same ollama_host / ollama_port as the embeddings service.
+ *
+ * @var string
+ */
+$conf['ollama_model'] = 'llama3.2';
+
+/**
  * Ollama Embeddings Model
- * 
+ *
  * The model name used for generating text embeddings.
  * Embeddings are used for semantic search in ChromaDB.
- * 
+ *
  * @var string
  */
 $conf['ollama_embeddings_model'] = 'nomic-embed-text';

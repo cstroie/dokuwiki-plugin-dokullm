@@ -46,6 +46,15 @@ class LlmClient
     /** @var string Anthropic model identifier */
     private $anthropic_model;
 
+    /** @var string Ollama server host */
+    private $ollama_host;
+
+    /** @var int Ollama server port */
+    private $ollama_port;
+
+    /** @var string Ollama LLM model identifier */
+    private $ollama_model;
+
     /** @var array Cache for tool call results */
     private $toolCallCache = [];
 
@@ -104,13 +113,16 @@ class LlmClient
      * - chromaClient: ChromaDB client instance (optional)
      * - pageId: Page ID (optional)
      */
-    public function __construct($openai_api_url = null, $openai_api_key = null, $openai_model = null, $anthropic_api_key = null, $anthropic_model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $provider = 'openai', $profile = null, $chromaClient = null, $pageId = null)
+    public function __construct($openai_api_url = null, $openai_api_key = null, $openai_model = null, $anthropic_api_key = null, $anthropic_model = null, $ollama_host = null, $ollama_port = null, $ollama_model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $provider = 'openai', $profile = null, $chromaClient = null, $pageId = null)
     {
         $this->openai_api_url    = $openai_api_url;
         $this->openai_api_key    = $openai_api_key;
         $this->openai_model      = $openai_model;
         $this->anthropic_api_key = $anthropic_api_key;
         $this->anthropic_model   = $anthropic_model;
+        $this->ollama_host       = $ollama_host;
+        $this->ollama_port       = $ollama_port;
+        $this->ollama_model      = $ollama_model;
         $this->timeout = $timeout;
         $this->temperature = $temperature;
         $this->top_p = $top_p;
@@ -278,6 +290,9 @@ class LlmClient
         // Dispatch to the appropriate provider
         if ($this->provider === 'anthropic') {
             return $this->callAnthropicAPI($systemPrompt, $prompt, $useTools);
+        }
+        if ($this->provider === 'ollama') {
+            return $this->callOllamaAPI($systemPrompt, $prompt, $useTools);
         }
 
         // Prepare API request data with model parameters
@@ -448,6 +463,205 @@ class LlmClient
 
         // Throw exception for unexpected response format
         throw new Exception('Unexpected API response format');
+    }
+
+    /**
+     * Build and send a request to Ollama's native /api/chat endpoint
+     *
+     * Sampling parameters are placed inside an 'options' object as required
+     * by the Ollama API. The think flag is sent at the top level (supported by
+     * thinking-capable models such as Qwen3). No authentication header is sent
+     * because Ollama runs as a local service. Tools use the same definition
+     * format as OpenAI so getAvailableTools() is reused without conversion.
+     *
+     * @param string $systemPrompt The system prompt
+     * @param string $prompt The user message
+     * @param bool $useTools Whether to enable tool calling
+     * @return string The response text
+     */
+    private function callOllamaAPI($systemPrompt, $prompt, $useTools = false)
+    {
+        $data = [
+            'model'      => $this->ollama_model,
+            'messages'   => [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user',   'content' => $prompt],
+            ],
+            'stream'     => false,
+            'keep_alive' => '30m',
+        ];
+
+        if ($this->think) {
+            $data['think'] = true;
+        }
+
+        // Ollama sampling parameters live inside 'options', not at the top level
+        $options = [];
+        if ($this->temperature !== null) $options['temperature'] = $this->temperature;
+        if ($this->top_p       !== null) $options['top_p']       = $this->top_p;
+        if ($this->top_k       !== null) $options['top_k']       = $this->top_k;
+        if ($this->min_p       !== null) $options['min_p']       = $this->min_p;
+        if (!empty($options)) {
+            $data['options'] = $options;
+        }
+
+        if ($useTools) {
+            $data['tools'] = $this->getAvailableTools();
+        }
+
+        $url = 'http://' . $this->ollama_host . ':' . $this->ollama_port . '/api/chat';
+        return $this->callOllamaAPIWithTools($data, $url, false, $useTools);
+    }
+
+    /**
+     * Execute an Ollama API call, handling tool use recursively
+     *
+     * Parses the native Ollama response shape (message.content / message.tool_calls).
+     * Tool result messages use role:'tool' with no tool_call_id — each call gets
+     * its own separate message, mirroring OpenAI's per-message style.
+     * Arguments arrive as a decoded array (not a JSON string), so no json_decode
+     * is needed; a string fallback is included for older Ollama versions.
+     *
+     * @param array  $data        Full request body
+     * @param string $url         Ollama /api/chat endpoint URL
+     * @param bool   $toolsCalled Whether the loop limit has been hit
+     * @param bool   $useTools    Whether to process tool_calls in the response
+     * @return string The final text content
+     * @throws Exception On HTTP or format errors
+     */
+    private function callOllamaAPIWithTools($data, $url, $toolsCalled = false, $useTools = true)
+    {
+        if ($toolsCalled) {
+            unset($data['tools']);
+        }
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error    = curl_error($ch);
+        curl_close($ch);
+
+        if ($error) {
+            throw new Exception('Ollama API request failed: ' . $error);
+        }
+        if ($httpCode !== 200) {
+            throw new Exception('Ollama API request failed with HTTP code: ' . $httpCode . ' - ' . $response);
+        }
+
+        $result     = json_decode($response, true);
+        $message    = $result['message'] ?? [];
+        $content    = $message['content']    ?? '';
+        $toolCalls  = $message['tool_calls'] ?? [];
+
+        // Final text response
+        if (!empty($content) && empty($toolCalls)) {
+            $this->toolCallCounts = [];
+            return $content;
+        }
+
+        // Tool use response
+        if ($useTools && !empty($toolCalls)) {
+            $messages = $data['messages'];
+
+            // Add the assistant turn with its tool_calls intact
+            $messages[] = [
+                'role'       => 'assistant',
+                'content'    => $content,
+                'tool_calls' => $toolCalls,
+            ];
+
+            // Each tool call gets its own role:tool message (no tool_call_id in Ollama)
+            foreach ($toolCalls as $toolCall) {
+                $toolName = $toolCall['function']['name'] ?? '';
+
+                if (!isset($this->toolCallCounts[$toolName])) {
+                    $this->toolCallCounts[$toolName] = 0;
+                }
+                $this->toolCallCounts[$toolName]++;
+
+                $messages[] = $this->handleToolCallOllama($toolCall);
+            }
+
+            // Loop protection: same limits as other providers
+            $toolsCalledCount = 0;
+            foreach ($this->toolCallCounts as $count) {
+                if ($count > 3) {
+                    $toolsCalled = true;
+                    break;
+                }
+                $toolsCalledCount += $count;
+            }
+            if ($toolsCalledCount > 10) {
+                $toolsCalled = true;
+            }
+
+            $data['messages'] = $messages;
+            return $this->callOllamaAPIWithTools($data, $url, $toolsCalled, $useTools);
+        }
+
+        throw new Exception('Unexpected Ollama API response format');
+    }
+
+    /**
+     * Dispatch an Ollama tool_call entry and return a role:tool message
+     *
+     * Ollama delivers arguments as a decoded array; older builds may send a
+     * JSON string, so both forms are handled. Results share $toolCallCache
+     * with the other provider paths using the same MD5 key formula.
+     *
+     * @param array $toolCall A tool_calls entry from the Ollama response message
+     * @return array A role:tool message ready to append to the conversation
+     */
+    private function handleToolCallOllama($toolCall)
+    {
+        $toolName  = $toolCall['function']['name'] ?? '';
+        $arguments = $toolCall['function']['arguments'] ?? [];
+
+        // Older Ollama versions may send arguments as a JSON string
+        if (is_string($arguments)) {
+            $arguments = json_decode($arguments, true) ?? [];
+        }
+
+        $cacheKey = md5($toolName . serialize($arguments));
+
+        if (isset($this->toolCallCache[$cacheKey])) {
+            $content = $this->toolCallCache[$cacheKey]['content'];
+        } else {
+            switch ($toolName) {
+                case 'get_document':
+                    $pageContent = $this->getPageContent($arguments['id'] ?? '');
+                    $content = ($pageContent === false)
+                        ? 'Document not found: ' . ($arguments['id'] ?? '')
+                        : $pageContent;
+                    break;
+
+                case 'get_template':
+                    $content = $this->getTemplateContent();
+                    break;
+
+                case 'get_examples':
+                    $count   = isset($arguments['count']) ? (int)$arguments['count'] : 5;
+                    $content = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                    break;
+
+                default:
+                    $content = 'Unknown tool: ' . $toolName;
+            }
+
+            $this->toolCallCache[$cacheKey] = ['content' => $content];
+        }
+
+        return [
+            'role'    => 'tool',
+            'content' => $content,
+        ];
     }
 
     /**
