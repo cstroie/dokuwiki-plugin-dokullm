@@ -165,6 +165,11 @@ $meta['replace_id'] = array('onoff');
 $meta['think'] = array('onoff');
 
 /**
+ * Metadata for the think_budget configuration option
+ */
+$meta['think_budget'] = array('numeric', '_min' => 1024);
+
+/**
  * Metadata for the tools configuration option
  *
  * Defines whether the LLM can use tools to enhance its responses.

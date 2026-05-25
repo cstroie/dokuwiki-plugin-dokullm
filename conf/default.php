@@ -163,6 +163,17 @@ $conf['replace_id'] = true;
 $conf['think'] = false;
 
 /**
+ * Thinking budget in tokens (Anthropic extended thinking only)
+ *
+ * Maximum number of tokens the model may use for its internal reasoning
+ * before producing a visible response. Only used when provider=anthropic
+ * and think=true. Ignored by other providers.
+ *
+ * @var int
+ */
+$conf['think_budget'] = 5000;
+
+/**
  * Enable tool usage in LLM responses
  * 
  * Controls whether the LLM can use tools to enhance its responses.

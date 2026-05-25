@@ -328,7 +328,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             $this->getConf('profile', 'default'),
             $chromaClient,
             $pageId,
-            $this->getConf('chroma_default_collection')
+            $this->getConf('chroma_default_collection'),
+            $this->getConf('think_budget', 5000)
         );
         try {
             $result = $client->process($action, $text, $metadata);
@@ -507,7 +508,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 $this->getConf('profile', 'default'),
                 $chromaClient,
                 $pageId,
-                $this->getConf('chroma_default_collection')
+                $this->getConf('chroma_default_collection'),
+                $this->getConf('think_budget', 5000)
             );
             // Query ChromaDB for the most relevant template
             $template = $client->queryChromaDBTemplate($text);
