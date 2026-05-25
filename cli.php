@@ -3,7 +3,18 @@
 use splitbrain\phpcli\Options;
 
 if (!defined('DOKU_INC')) define('DOKU_INC', realpath(dirname(__FILE__) . '/../../../') . '/');
-require_once DOKU_INC . 'inc/cli.php';
+require_once DOKU_INC . 'inc/init.php';
+
+// DokuWiki_CLI_Plugin may not be defined in all DokuWiki versions; provide a minimal shim.
+if (!class_exists('DokuWiki_CLI_Plugin')) {
+    abstract class DokuWiki_CLI_Plugin extends \splitbrain\phpcli\CLI {
+        public function getConf(string $key, $default = null) {
+            global $conf;
+            $plugin = preg_replace('/^cli_plugin_/', '', strtolower(get_class($this)));
+            return $conf['plugin'][$plugin][$key] ?? $default;
+        }
+    }
+}
 
 /**
  * DokuWiki CLI plugin for ChromaDB operations
