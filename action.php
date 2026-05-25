@@ -683,8 +683,9 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      * @return void
      */
     public function handleTemplate(Doku_Event &$event, $param) {
-        if (strlen($_REQUEST['copyfrom']) > 0) {
-            $template_id = $_REQUEST['copyfrom'];
+        global $INPUT;
+        $template_id = cleanID($INPUT->str('copyfrom'));
+        if ($template_id !== '') {
             if (auth_quickaclcheck($template_id) >= AUTH_READ) {
                 $tpl = io_readFile(wikiFN($template_id));
                 if ($tpl === false || $tpl === '') {
