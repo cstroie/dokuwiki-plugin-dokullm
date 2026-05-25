@@ -690,7 +690,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      */
     private function modelCacheFile($provider)
     {
-        return DOKU_DATA . 'tmp/plugin_dokullm_models_' . $provider . '.json';
+        global $conf;
+        return $conf['savedir'] . '/tmp/plugin_dokullm_models_' . $provider . '.json';
     }
 
     /**
@@ -716,6 +717,10 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
     private function saveModelCache($provider, array $models)
     {
         $file = $this->modelCacheFile($provider);
+        $dir  = dirname($file);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
         file_put_contents($file, json_encode(['models' => $models, 'fetched_at' => time()]));
     }
 
