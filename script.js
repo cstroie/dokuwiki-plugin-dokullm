@@ -20,6 +20,9 @@
     // Load language strings from JSINFO
     const lang = typeof JSINFO !== 'undefined' && JSINFO.plugins && JSINFO.plugins.dokullm ? JSINFO.plugins.dokullm.lang : {};
 
+    // Debug helper — only logs when JSINFO.plugins.dokullm.debug is true
+    const dbg = (...args) => { if (typeof JSINFO !== 'undefined' && JSINFO.plugins?.dokullm?.debug) console.log(...args); };
+
     /**
      * Initialize the plugin when the DOM is ready
      * 
@@ -34,12 +37,12 @@
      * 3. Setting up event listeners for the copy page functionality
      */
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('DokuLLM: DOM loaded, initializing plugin');
+        dbg('DokuLLM: DOM loaded, initializing plugin');
         // Only run on edit pages and only for authenticated users
         // Check if user is authenticated by looking for edit form elements
         if (document.getElementById('wiki__text') && document.querySelector('form#dw__editform')) {
             // Add DokuLLM tools to the editor
-            console.log('DokuLLM: Adding DokuLLM tools to editor');
+            dbg('DokuLLM: Adding DokuLLM tools to editor');
             addDokuLLMTools();
         }
         
@@ -91,11 +94,11 @@
     function addDokuLLMTools() {
         const editor = document.getElementById('wiki__text');
         if (!editor) {
-            console.log('DokuLLM: Editor div not found');
+            dbg('DokuLLM: Editor div not found');
             return;
         }
         
-        console.log('DokuLLM: Creating DokuLLM toolbar');
+        dbg('DokuLLM: Creating DokuLLM toolbar');
         // Create toolbar container
         const toolbar = document.createElement('div');
         toolbar.id = 'dokullm-toolbar';
@@ -104,11 +107,11 @@
         
         // Get metadata to check if template exists
         const metadata = getMetadata();
-        console.log('DokuLLM: Page metadata retrieved', metadata);
+        dbg('DokuLLM: Page metadata retrieved', metadata);
         
         // Add "Insert template" button if template is defined
         if (metadata.template) {
-            console.log('DokuLLM: Adding insert template button for', metadata.template);
+            dbg('DokuLLM: Adding insert template button for', metadata.template);
             const templateBtn = document.createElement('button');
             templateBtn.type = 'button';
             templateBtn.className = 'toolbutton btn btn-default';
@@ -120,7 +123,7 @@
             // Check if ChromaDB is enabled through JSINFO
             const chromaDBEnabled = typeof JSINFO !== 'undefined' && JSINFO.plugins && JSINFO.plugins.dokullm && JSINFO.plugins.dokullm.enable_chromadb;
             if (chromaDBEnabled) {
-                console.log('DokuLLM: Adding find template button');
+                dbg('DokuLLM: Adding find template button');
                 const findTemplateBtn = document.createElement('button');
                 findTemplateBtn.type = 'button';
                 findTemplateBtn.className = 'toolbutton btn btn-default';
@@ -140,7 +143,7 @@
         editor.parentNode.insertBefore(toolbar, editor);
         
         // Add custom prompt input below the editor
-        console.log('DokuLLM: Adding custom prompt input below editor');
+        dbg('DokuLLM: Adding custom prompt input below editor');
         const customPromptContainer = document.createElement('div');
         customPromptContainer.className = 'dokullm-custom-prompt';
         customPromptContainer.id = 'dokullm-custom-prompt';
@@ -235,7 +238,7 @@
                     toolbar.appendChild(btn);
                 });
                 
-                console.log('DokuLLM: DokuLLM toolbars added successfully');
+                dbg('DokuLLM: DokuLLM toolbars added successfully');
             })
             .catch(error => {
                 console.error('DokuLLM: Error fetching action definitions:', error);
@@ -320,10 +323,10 @@
     let currentSelectionRange = null;
     
     function processDokuLLMAction(action, event) {
-        console.log('DokuLLM: Processing text with action:', action);
+        dbg('DokuLLM: Processing text with action:', action);
         const editor = document.getElementById('wiki__text');
         if (!editor) {
-            console.log('DokuLLM: Editor not found');
+            dbg('DokuLLM: Editor not found');
             return;
         }
         
@@ -335,15 +338,15 @@
         
         // Get metadata from the page
         const metadata = getMetadata();
-        console.log('DokuLLM: Retrieved metadata:', metadata);
+        dbg('DokuLLM: Retrieved metadata:', metadata);
         
         const selectedText = getSelectedText(editor);
         const fullText = editor.value;
         const textToProcess = selectedText || fullText;
-        console.log('DokuLLM: Text to process length:', textToProcess.length);
+        dbg('DokuLLM: Text to process length:', textToProcess.length);
         
         if (!textToProcess.trim()) {
-            console.log('DokuLLM: No text to process');
+            dbg('DokuLLM: No text to process');
             alert(lang.no_text_provided || 'Please select text or enter content to process');
             return;
         }
@@ -379,13 +382,13 @@
             }
             button.disabled = true;
         });
-        console.log('DokuLLM: Toolbar disabled, showing processing state');
+        dbg('DokuLLM: Toolbar disabled, showing processing state');
         
         // Make textarea readonly during processing
         editor.readOnly = true;
         
         // Send AJAX request
-        console.log('DokuLLM: Sending AJAX request to backend');
+        dbg('DokuLLM: Sending AJAX request to backend');
         const formData = new FormData();
         formData.append('call', 'plugin_dokullm');
         formData.append('action', action);
@@ -410,7 +413,7 @@
                     throw new Error((lang.backend_error || 'Network response was not ok: ') + response.status + ' ' + response.statusText + ' - ' + text);
                 });
             }
-            console.log('DokuLLM: Received response from backend');
+            dbg('DokuLLM: Received response from backend');
             return response.json();
         })
         .then(data => {
@@ -419,7 +422,7 @@
                 throw new Error(data.error);
             }
 
-            console.log('DokuLLM: Processing successful, result length:', data.result.length);
+            dbg('DokuLLM: Processing successful, result length:', data.result.length);
             if (data.debug) {
                 console.groupCollapsed('DokuLLM debug: prompts');
                 console.log('System:', data.debug.system);
@@ -435,11 +438,11 @@
             
             // Replace selected text or handle result based on resultHandling
             if (resultHandling === 'show') {
-                console.log('DokuLLM: Showing result in modal');
+                dbg('DokuLLM: Showing result in modal');
                 const buttonTitle = event.target.title || action;
                 showModal(cleanedResult, action, buttonTitle);
             } else if (resultHandling === 'append') {
-                console.log('DokuLLM: Appending result to existing text');
+                dbg('DokuLLM: Appending result to existing text');
                 // Append to the end of existing content (preserving metadata)
                 const metadata = extractMetadata(editor.value);
                 const contentWithoutMetadata = editor.value.substring(metadata.length);
@@ -449,7 +452,7 @@
                     showModal(thinkingContent, 'thinking', lang.thinking_process || 'AI Thinking Process');
                 }
             } else if (resultHandling === 'insert') {
-                console.log('DokuLLM: Inserting result before existing text');
+                dbg('DokuLLM: Inserting result before existing text');
                 // Insert before existing content (preserving metadata)
                 const metadata = extractMetadata(editor.value);
                 const contentWithoutMetadata = editor.value.substring(metadata.length);
@@ -460,14 +463,14 @@
                     showModal(thinkingContent, 'thinking', lang.thinking_process || 'AI Thinking Process');
                 }
             } else if (selectedText) {
-                console.log('DokuLLM: Replacing selected text');
+                dbg('DokuLLM: Replacing selected text');
                 replaceSelectedText(editor, cleanedResult);
                 // Show thinking content in modal if it exists and thinking is enabled
                 if (thinkingContent) {
                     showModal(thinkingContent, 'thinking', lang.thinking_process || 'AI Thinking Process');
                 }
             } else {
-                console.log('DokuLLM: Replacing full text content');
+                dbg('DokuLLM: Replacing full text content');
                 // Preserve metadata when doing full page update
                 const metadata = extractMetadata(editor.value);
                 editor.value = metadata + cleanedResult;
@@ -482,7 +485,7 @@
             alert('Error: ' + error.message);
         })
         .finally(() => {
-            console.log('DokuLLM: Resetting toolbar and enabling editor');
+            dbg('DokuLLM: Resetting toolbar and enabling editor');
             // Re-enable the toolbar and prompt input
             if (promptInput) {
                 promptInput.disabled = originalStates.promptInput;
@@ -660,7 +663,7 @@
     function appendToReport(content) {
         const editor = document.getElementById('wiki__text');
         if (!editor) {
-            console.log('DokuLLM: Editor not found for appending content');
+            dbg('DokuLLM: Editor not found for appending content');
             return;
         }
         
@@ -714,9 +717,9 @@
      * @param {string} action - The action to perform with the result (append, show, replace, insert)
      */
     function processCustomPromptWithAction(customPrompt, action) {
-        console.log('DokuLLM: Processing custom prompt:', customPrompt, 'with action:', action);
+        dbg('DokuLLM: Processing custom prompt:', customPrompt, 'with action:', action);
         if (!customPrompt.trim()) {
-            console.log('DokuLLM: No custom prompt provided');
+            dbg('DokuLLM: No custom prompt provided');
             alert(lang.no_prompt_provided || 'Please enter a prompt');
             return;
         }
@@ -726,7 +729,7 @@
         
         const editor = document.getElementById('wiki__text');
         if (!editor) {
-            console.log('DokuLLM: Editor not found for custom prompt');
+            dbg('DokuLLM: Editor not found for custom prompt');
             return;
         }
         
@@ -739,17 +742,17 @@
         const selectedText = getSelectedText(editor);
         const fullText = editor.value;
         const textToProcess = selectedText || fullText;
-        console.log('DokuLLM: Text to process length:', textToProcess.length);
+        dbg('DokuLLM: Text to process length:', textToProcess.length);
         
         if (!textToProcess.trim()) {
-            console.log('DokuLLM: No text to process for custom prompt');
+            dbg('DokuLLM: No text to process for custom prompt');
             alert(lang.no_text_provided || 'Please select text or enter content to process');
             return;
         }
         
         // Get metadata from the page
         const metadata = getMetadata();
-        console.log('DokuLLM: Retrieved metadata for custom prompt:', metadata);
+        dbg('DokuLLM: Retrieved metadata for custom prompt:', metadata);
         
         // Find the Send button and show loading state
         const toolbar = document.getElementById('dokullm-custom-prompt');
@@ -757,13 +760,13 @@
         const originalText = sendButton.textContent;
         sendButton.textContent = lang.processing || 'Processing...';
         sendButton.disabled = true;
-        console.log('DokuLLM: Send button disabled, showing processing state');
+        dbg('DokuLLM: Send button disabled, showing processing state');
         
         // Make textarea readonly during processing
         editor.readOnly = true;
         
         // Send AJAX request
-        console.log('DokuLLM: Sending custom prompt AJAX request to backend');
+        dbg('DokuLLM: Sending custom prompt AJAX request to backend');
         const formData = new FormData();
         formData.append('call', 'plugin_dokullm');
         formData.append('action', 'custom');
@@ -788,7 +791,7 @@
                     throw new Error((lang.backend_error || 'Network response was not ok: ') + response.status + ' ' + response.statusText + ' - ' + text);
                 });
             }
-            console.log('DokuLLM: Received response for custom prompt');
+            dbg('DokuLLM: Received response for custom prompt');
             return response.json();
         })
         .then(data => {
@@ -797,7 +800,7 @@
                 throw new Error(data.error);
             }
 
-            console.log('DokuLLM: Custom prompt processing successful, result length:', data.result.length);
+            dbg('DokuLLM: Custom prompt processing successful, result length:', data.result.length);
             if (data.debug) {
                 console.groupCollapsed('DokuLLM debug: prompts');
                 console.log('System:', data.debug.system);
@@ -810,12 +813,12 @@
             // Handle result based on the specified action
             switch (action) {
                 case 'show':
-                    console.log('DokuLLM: Showing result in modal for custom prompt');
+                    dbg('DokuLLM: Showing result in modal for custom prompt');
                     showModal(cleanedResult, 'custom', lang.custom_result || 'Custom Prompt Result');
                     break;
                     
                 case 'append':
-                    console.log('DokuLLM: Appending result to existing text for custom prompt');
+                    dbg('DokuLLM: Appending result to existing text for custom prompt');
                     // Append to the end of existing content (preserving metadata)
                     const metadata = extractMetadata(editor.value);
                     const contentWithoutMetadata = editor.value.substring(metadata.length);
@@ -823,7 +826,7 @@
                     break;
                     
                 case 'insert':
-                    console.log('DokuLLM: Inserting result before existing text for custom prompt');
+                    dbg('DokuLLM: Inserting result before existing text for custom prompt');
                     // Insert before existing content (preserving metadata)
                     const metadataInsert = extractMetadata(editor.value);
                     const contentWithoutMetadataInsert = editor.value.substring(metadataInsert.length);
@@ -835,10 +838,10 @@
                 default:
                     // Replace selected text or append to editor
                     if (selectedText) {
-                        console.log('DokuLLM: Replacing selected text for custom prompt');
+                        dbg('DokuLLM: Replacing selected text for custom prompt');
                         replaceSelectedText(editor, cleanedResult);
                     } else {
-                        console.log('DokuLLM: Replacing full text content for custom prompt');
+                        dbg('DokuLLM: Replacing full text content for custom prompt');
                         // Preserve metadata when doing full page update
                         const metadata = extractMetadata(editor.value);
                         editor.value = metadata + cleanedResult;
@@ -861,7 +864,7 @@
             alert((lang.backend_error || 'Error: ') + error.message);
         })
         .finally(() => {
-            console.log('DokuLLM: Resetting send button and enabling editor');
+            dbg('DokuLLM: Resetting send button and enabling editor');
             if (sendButton) {
                 resetButton(sendButton, originalText);
             }
@@ -1038,10 +1041,10 @@
      * @param {Event} event - The click event
      */
     function findTemplate(event) {
-        console.log('DokuLLM: Finding and inserting template');
+        dbg('DokuLLM: Finding and inserting template');
         const editor = document.getElementById('wiki__text');
         if (!editor) {
-            console.log('DokuLLM: Editor not found for template search');
+            dbg('DokuLLM: Editor not found for template search');
             return;
         }
         
@@ -1074,7 +1077,7 @@
             button.disabled = true;
         });
         editor.readOnly = true;
-        console.log('DokuLLM: Showing loading indicator for template search');
+        dbg('DokuLLM: Showing loading indicator for template search');
         
         // Use text selection if available, otherwise fall back to full textarea
         const selStart = editor.selectionStart;
@@ -1084,7 +1087,7 @@
             : editor.value;
 
         // Send AJAX request to find template
-        console.log('DokuLLM: Sending AJAX request to find template' + (selStart !== selEnd ? ' (using selection)' : ''));
+        dbg('DokuLLM: Sending AJAX request to find template' + (selStart !== selEnd ? ' (using selection)' : ''));
         const formData = new FormData();
         formData.append('call', 'plugin_dokullm');
         formData.append('action', 'find_template');
@@ -1108,7 +1111,7 @@
             }
 
             if (data.result && data.result.template) {
-                console.log('DokuLLM: Template found:', data.result.template);
+                dbg('DokuLLM: Template found:', data.result.template);
                 // Insert template metadata at the top of the text, but after title if present
                 const metadataLine = `~~LLM_TEMPLATE:${data.result.template}~~`;
                 editor.value = insertMetadataAfterTitle(editor.value, metadataLine);
@@ -1126,7 +1129,7 @@
             alert((lang.backend_error || 'Error: ') + error.message);
         })
         .finally(() => {
-            console.log('DokuLLM: Restoring toolbar and enabling editor');
+            dbg('DokuLLM: Restoring toolbar and enabling editor');
             // Re-enable the toolbar and prompt input
             if (promptInput) {
                 promptInput.disabled = originalStates.promptInput;
@@ -1158,10 +1161,10 @@
      * @param {string} templateId - The template page ID
      */
     function insertTemplateContent(templateId) {
-        console.log('DokuLLM: Inserting template content for:', templateId);
+        dbg('DokuLLM: Inserting template content for:', templateId);
         const editor = document.getElementById('wiki__text');
         if (!editor) {
-            console.log('DokuLLM: Editor not found for template insertion');
+            dbg('DokuLLM: Editor not found for template insertion');
             return;
         }
         
@@ -1170,10 +1173,10 @@
         const originalContent = toolbar.innerHTML;
         toolbar.innerHTML = '<span>' + (lang.loading_template || 'Loading template...') + '</span>';
         editor.readOnly = true;
-        console.log('DokuLLM: Showing loading indicator for template');
+        dbg('DokuLLM: Showing loading indicator for template');
         
         // Send AJAX request to get template content
-        console.log('DokuLLM: Sending AJAX request to get template content');
+        dbg('DokuLLM: Sending AJAX request to get template content');
         const formData = new FormData();
         formData.append('call', 'plugin_dokullm');
         formData.append('action', 'get_template');
@@ -1195,7 +1198,7 @@
                 throw new Error(data.error);
             }
 
-            console.log('DokuLLM: Template retrieved successfully, content length:', data.result.content.length);
+            dbg('DokuLLM: Template retrieved successfully, content length:', data.result.content.length);
             // Insert template content at cursor position or at the beginning
             const cursorPos = editor.selectionStart;
             const text = editor.value;
@@ -1211,7 +1214,7 @@
             alert((lang.backend_error || 'Error: ') + error.message);
         })
         .finally(() => {
-            console.log('DokuLLM: Restoring toolbar and enabling editor');
+            dbg('DokuLLM: Restoring toolbar and enabling editor');
             toolbar.innerHTML = originalContent;
             editor.readOnly = false;
         });
