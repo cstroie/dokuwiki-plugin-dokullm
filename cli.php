@@ -3,7 +3,6 @@
 use splitbrain\phpcli\Options;
 
 if (!defined('DOKU_INC')) define('DOKU_INC', realpath(dirname(__FILE__) . '/../../../') . '/');
-require_once DOKU_INC . 'inc/init.php';
 
 // DokuWiki_CLI_Plugin may not be defined in all DokuWiki versions; provide a minimal shim.
 if (!class_exists('DokuWiki_CLI_Plugin')) {
