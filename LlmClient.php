@@ -91,6 +91,9 @@ class LlmClient
     /** @var string|null Page ID */
     private $pageId;
 
+    /** @var string Default ChromaDB collection when page ID provides no segment */
+    private $defaultCollection;
+
     /** @var string Last user prompt sent to the LLM */
     private $lastPrompt = '';
 
@@ -116,27 +119,28 @@ class LlmClient
      * - chromaClient: ChromaDB client instance (optional)
      * - pageId: Page ID (optional)
      */
-    public function __construct($openai_api_url = null, $openai_api_key = null, $openai_model = null, $anthropic_api_key = null, $anthropic_model = null, $ollama_host = null, $ollama_port = null, $ollama_model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $provider = 'openai', $profile = null, $chromaClient = null, $pageId = null)
+    public function __construct($openai_api_url = null, $openai_api_key = null, $openai_model = null, $anthropic_api_key = null, $anthropic_model = null, $ollama_host = null, $ollama_port = null, $ollama_model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $provider = 'openai', $profile = null, $chromaClient = null, $pageId = null, $defaultCollection = 'documents')
     {
-        $this->openai_api_url    = $openai_api_url;
-        $this->openai_api_key    = $openai_api_key;
-        $this->openai_model      = $openai_model;
-        $this->anthropic_api_key = $anthropic_api_key;
-        $this->anthropic_model   = $anthropic_model;
-        $this->ollama_host       = $ollama_host;
-        $this->ollama_port       = $ollama_port;
-        $this->ollama_model      = $ollama_model;
-        $this->timeout = $timeout;
-        $this->temperature = $temperature;
-        $this->top_p = $top_p;
-        $this->top_k = $top_k;
-        $this->min_p = $min_p;
-        $this->think = $think;
-        $this->tools = $tools;
-        $this->provider = $provider ?? 'openai';
-        $this->profile = $profile;
-        $this->chromaClient = $chromaClient;
-        $this->pageId = $pageId;
+        $this->openai_api_url      = $openai_api_url;
+        $this->openai_api_key      = $openai_api_key;
+        $this->openai_model        = $openai_model;
+        $this->anthropic_api_key   = $anthropic_api_key;
+        $this->anthropic_model     = $anthropic_model;
+        $this->ollama_host         = $ollama_host;
+        $this->ollama_port         = $ollama_port;
+        $this->ollama_model        = $ollama_model;
+        $this->timeout             = $timeout;
+        $this->temperature         = $temperature;
+        $this->top_p               = $top_p;
+        $this->top_k               = $top_k;
+        $this->min_p               = $min_p;
+        $this->think               = $think;
+        $this->tools               = $tools;
+        $this->provider            = $provider ?? 'openai';
+        $this->profile             = $profile;
+        $this->chromaClient        = $chromaClient;
+        $this->pageId              = $pageId;
+        $this->defaultCollection   = $defaultCollection ?: 'documents';
     }
 
     public function getLastPrompt(): string { return $this->lastPrompt; }
@@ -1396,7 +1400,7 @@ class LlmClient
     {
         // If we have a ChromaDB client passed in constructor, use it
         if ($this->chromaClient !== null) {
-            $chromaCollection = 'documents';
+            $chromaCollection = $this->defaultCollection;
 
             if (!empty($this->pageId)) {
                 // Split the page ID by ':' and take the first part as collection name
@@ -1405,7 +1409,7 @@ class LlmClient
                     // If the first part is 'playground', use the default collection
                     // Otherwise, use the first part as the collection name
                     if ($parts[0] === 'playground') {
-                        $chromaCollection = '';
+                        $chromaCollection = $this->defaultCollection;
                     } else {
                         $chromaCollection = $parts[0];
                     }

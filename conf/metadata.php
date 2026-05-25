@@ -219,13 +219,13 @@ $meta['chroma_tenant'] = array('string');
 $meta['chroma_database'] = array('string');
 
 /**
- * Metadata for the ChromaDB collection configuration option
- * 
- * Defines the ChromaDB collection as a string input field in the configuration interface.
- * 
+ * Metadata for the ChromaDB default collection configuration option
+ *
+ * Fallback collection used when the page ID provides no collection segment.
+ *
  * @var array
  */
-$meta['chroma_collection'] = array('string');
+$meta['chroma_default_collection'] = array('string');
 
 /**
  * Metadata for the Ollama host configuration option

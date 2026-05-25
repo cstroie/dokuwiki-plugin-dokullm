@@ -224,14 +224,14 @@ $conf['chroma_tenant'] = 'dokullm';
 $conf['chroma_database'] = 'dokullm';
 
 /**
- * ChromaDB Collection
- * 
- * The default collection name for document storage.
+ * ChromaDB Default Collection
+ *
+ * Fallback collection name used when the page ID does not provide one.
  * Collections are used to group related documents.
- * 
+ *
  * @var string
  */
-$conf['chroma_collection'] = 'documents';
+$conf['chroma_default_collection'] = 'documents';
 
 /**
  * Ollama Host

@@ -298,7 +298,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 $this->getConf('chroma_port'),
                 $this->getConf('chroma_tenant'),
                 $this->getConf('chroma_database'),
-                $this->getConf('chroma_collection'),
+                $this->getConf('chroma_default_collection'),
                 $this->getConf('ollama_host'),
                 $this->getConf('ollama_port'),
                 $this->getConf('ollama_embeddings_model')
@@ -323,7 +323,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             $this->getConf('provider', 'openai'),
             $this->getConf('profile', 'default'),
             $chromaClient,
-            $ID
+            $ID,
+            $this->getConf('chroma_default_collection')
         );
         try {
             $result = $client->process($action, $text, $metadata);
@@ -477,7 +478,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                     $this->getConf('chroma_port'),
                     $this->getConf('chroma_tenant'),
                     $this->getConf('chroma_database'),
-                    $this->getConf('chroma_collection'),
+                    $this->getConf('chroma_default_collection'),
                     $this->getConf('ollama_host'),
                     $this->getConf('ollama_port'),
                     $this->getConf('ollama_embeddings_model')
@@ -502,7 +503,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 $this->getConf('provider', 'openai'),
                 $this->getConf('profile', 'default'),
                 $chromaClient,
-                $ID
+                $ID,
+                $this->getConf('chroma_default_collection')
             );
             // Query ChromaDB for the most relevant template
             $template = $client->queryChromaDBTemplate($text);
@@ -583,14 +585,14 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 $chromaPort,
                 $chromaTenant,
                 $chromaDatabase,
-                $this->getConf('chroma_collection'),
+                $this->getConf('chroma_default_collection'),
                 $ollamaHost,
                 $ollamaPort,
                 $ollamaModel
             );
-            // Use the first part of the document ID as collection name, fallback to 'documents'
+            // Use the first part of the document ID as collection name, fallback to configured default
             $idParts = explode(':', $pageId);
-            $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : 'documents';
+            $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection');
             // Process the file directly
             $result = $chroma->processSingleFile($filePath, $collectionName, false);
             // Log success or failure
