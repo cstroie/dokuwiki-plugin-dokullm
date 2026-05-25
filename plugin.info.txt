@@ -1,7 +1,7 @@
 base   dokullm
 author Costin Stroie
 email  costinstroie@eridu.eu.org
-date   2025-10-20
+date   2026-05-25
 name   dokullm plugin
 desc   DokuLLM is a DokuWiki plugin that integrates Large Language Model (LLM) capabilities with semantic search functionality through ChromaDB integration.
 url    https://www.dokuwiki.org/plugin:dokullm
