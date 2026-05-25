@@ -434,14 +434,12 @@ class ChromaDBClient {
     }
 
     /**
-     * Get authentication and identity information
-     * 
-     * Retrieves authentication and identity information from the ChromaDB server.
-     * 
-     * @return array The response from the auth/identity endpoint
+     * Get ChromaDB server version
+     *
+     * @return array The response from the version endpoint
      */
     public function getIdentity() {
-        $endpoint = "/identity";
+        $endpoint = "/version";
         return $this->makeRequest($endpoint, 'GET');
     }
 

@@ -417,28 +417,20 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
     }
 
     /**
-     * Get authentication and identity information from ChromaDB
+     * Get ChromaDB server version
      */
     private function checkIdentity($host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
-        // Create ChromaDB client
         $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, 'documents', $ollamaHost, $ollamaPort, $ollamaModel);
-        
         try {
             if ($verbose) {
-                $this->info("Checking ChromaDB identity...");
                 $this->info("Host: $host:$port");
                 $this->info("Tenant: $tenant");
                 $this->info("Database: $database");
-                $this->info("==========================================");
             }
-            
             $result = $chroma->getIdentity();
-            
-            $this->info("Identity information:");
-            $this->info("Response: " . json_encode($result, JSON_PRETTY_PRINT));
+            $this->info("ChromaDB version: " . (is_array($result) ? json_encode($result) : $result));
         } catch (Exception $e) {
-            $this->error("Error checking ChromaDB identity: " . $e->getMessage());
-            return;
+            $this->error("Error getting ChromaDB version: " . $e->getMessage());
         }
     }
 
