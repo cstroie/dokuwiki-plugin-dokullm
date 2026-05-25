@@ -82,6 +82,12 @@ class LlmClient
     /** @var bool Whether to enable thinking in LLM responses */
     private $think;
 
+    /** @var bool Whether to enable tool calling */
+    private $tools;
+
+    /** @var string Prompt profile name */
+    private $profile;
+
     /** @var string The API provider: 'openai', 'anthropic', or 'ollama' */
     private $provider;
 
