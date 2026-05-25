@@ -434,16 +434,6 @@ class ChromaDBClient {
     }
 
     /**
-     * Get ChromaDB server version
-     *
-     * @return array The response from the version endpoint
-     */
-    public function getIdentity() {
-        $endpoint = "/version";
-        return $this->makeRequest($endpoint, 'GET');
-    }
-
-    /**
      * Ensure that the specified tenant and database exist
      * 
      * Checks if the specified tenant and database exist, and creates them if they don't.

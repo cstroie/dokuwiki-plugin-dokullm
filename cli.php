@@ -34,7 +34,6 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
             "  send       Send a file or directory to ChromaDB\n" .
             "  query      Query ChromaDB\n" .
             "  heartbeat  Check if ChromaDB server is alive\n" .
-            "  identity   Get authentication and identity information\n" .
             "  list       List all collections\n" .
             "  get        Get a document by its ID\n"
         );
@@ -52,8 +51,6 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         $options->registerArgument('search', 'Search terms', true, 'query');
 
         $options->registerCommand('heartbeat', 'Check if ChromaDB server is alive');
-
-        $options->registerCommand('identity', 'Get authentication and identity information');
 
         $options->registerCommand('list', 'List all collections');
 
@@ -104,10 +101,6 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
 
             case 'heartbeat':
                 $this->checkHeartbeat($host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose);
-                break;
-
-            case 'identity':
-                $this->checkIdentity($host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose);
                 break;
 
             case 'list':
@@ -413,24 +406,6 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         } catch (Exception $e) {
             $this->error("Error checking ChromaDB server status: " . $e->getMessage());
             return;
-        }
-    }
-
-    /**
-     * Get ChromaDB server version
-     */
-    private function checkIdentity($host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
-        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, 'documents', $ollamaHost, $ollamaPort, $ollamaModel);
-        try {
-            if ($verbose) {
-                $this->info("Host: $host:$port");
-                $this->info("Tenant: $tenant");
-                $this->info("Database: $database");
-            }
-            $result = $chroma->getIdentity();
-            $this->info("ChromaDB version: " . (is_array($result) ? json_encode($result) : $result));
-        } catch (Exception $e) {
-            $this->error("Error getting ChromaDB version: " . $e->getMessage());
         }
     }
 
