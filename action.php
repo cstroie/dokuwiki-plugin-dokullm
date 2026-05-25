@@ -455,6 +455,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      * @throws Exception If an error occurs during the search
      */
     private function findTemplate($text) {
+        global $ID;
         try {
             // Create ChromaDB client only if enabled
             $chromaClient = null;
