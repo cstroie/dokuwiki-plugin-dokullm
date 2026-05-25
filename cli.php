@@ -56,7 +56,7 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         $options->registerCommand('list', 'List all collections');
 
         $options->registerCommand('get', 'Get a document by its ID');
-        //$options->registerOption('collection', 'Collection name', 'c', 'collection', 'documents', 'get');
+        $options->registerOption('collection', 'Collection name (default: derived from document ID)', 'c', 'collection', 'get');
         $options->registerArgument('id', 'Document ID', true, 'get');
     }
 
