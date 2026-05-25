@@ -48,6 +48,7 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         $options->registerCommand('query', 'Query ChromaDB');
         $options->registerOption('collection', 'Collection name to query (default: all collections)', 'c', 'collection', 'query');
         $options->registerOption('limit', 'Number of results to return', 'l', 'limit', 'query');
+        $options->registerOption('type', 'Filter by metadata type (e.g. template, report)', 't', 'type', 'query');
         $options->registerArgument('search', 'Search terms', true, 'query');
 
         $options->registerCommand('heartbeat', 'Check if ChromaDB server is alive');
@@ -96,7 +97,8 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
                 }
                 $collection = $options->getOpt('collection') ?: null;
                 $limit = (int)($options->getOpt('limit') ?: 5);
-                $this->queryChroma($searchTerms, $limit, $host, $port, $tenant, $database, $collection, $ollamaHost, $ollamaPort, $ollamaModel, $verbose);
+                $type = $options->getOpt('type') ?: null;
+                $this->queryChroma($searchTerms, $limit, $host, $port, $tenant, $database, $collection, $type, $ollamaHost, $ollamaPort, $ollamaModel, $verbose);
                 break;
 
             case 'heartbeat':
@@ -346,8 +348,9 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
     /**
      * Query ChromaDB for similar documents
      * If $collection is null, queries all available collections.
+     * If $type is set, filters results by metadata type field.
      */
-    private function queryChroma($searchTerms, $limit, $host, $port, $tenant, $database, $collection, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
+    private function queryChroma($searchTerms, $limit, $host, $port, $tenant, $database, $collection, $type, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
         $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, 'documents', $ollamaHost, $ollamaPort, $ollamaModel);
 
         // Resolve list of collections to query
@@ -367,12 +370,14 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
             }
         }
 
-        $this->info("Query: \"$searchTerms\"");
+        $where = $type ? ['type' => $type] : null;
+
+        $this->info("Query: \"$searchTerms\"" . ($type ? " [type=$type]" : ""));
         $this->info("==========================================");
 
         foreach ($collections as $col) {
             try {
-                $results = $chroma->queryCollection($col, [$searchTerms], $limit);
+                $results = $chroma->queryCollection($col, [$searchTerms], $limit, $where);
             } catch (Exception $e) {
                 $this->error("Collection '$col': " . $e->getMessage());
                 continue;
