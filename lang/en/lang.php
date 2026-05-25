@@ -49,7 +49,6 @@ $lang['js']['close_title'] = 'Close Modal';
 $lang['js']['append'] = 'Append';
 $lang['js']['append_title'] = 'Append to Report';
 $lang['js']['no_prompt_provided'] = 'Please enter a prompt';
-$lang['js']['no_text_provided'] = 'Please select text or enter content to process';
 $lang['js']['template_found'] = 'Template found and inserted: ';
 $lang['js']['no_template_found'] = 'No suitable template found for this content.';
 $lang['js']['loading_template'] = 'Loading template...';
