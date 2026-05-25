@@ -383,7 +383,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         $profile = $this->getConf('profile', 'default');
         try {
             $content = $this->getPageContent('dokullm:profiles:' . $profile);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             // If access is denied or page doesn't exist, return empty list
             \dokuwiki\Logger::error('DokuLLM: Profile page not accessible: dokullm:profiles:' . $profile);
             return [];
@@ -511,7 +511,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             // Query ChromaDB for the most relevant template
             $template = $client->queryChromaDBTemplate($text);
             return $template;
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             throw new Exception($this->getLang('error_finding_template') . $e->getMessage());
         }
     }
@@ -668,7 +668,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             } else {
                 \dokuwiki\Logger::error('DokuLLM: Error sending page to ChromaDB: ' . $pageId . ' - ' . $result['message']);
             }
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             throw $e;
         }
     }
@@ -741,7 +741,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             $models = $this->fetchModels($provider);
             $this->saveModelCache($provider, $models);
             echo json_encode(['models' => $models]);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             http_status(500);
             echo json_encode(['error' => $e->getMessage()]);
         }
@@ -804,7 +804,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             if (!empty($models)) {
                 $this->saveModelCache($provider, $models);
             }
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             \dokuwiki\Logger::error('DokuLLM: model cache refresh failed (' . $provider . '): ' . $e->getMessage());
         }
     }
