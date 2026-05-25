@@ -786,7 +786,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
-        file_put_contents($file, json_encode(['models' => $models, 'fetched_at' => time()]));
+        file_put_contents($file, json_encode(['models' => $models, 'fetched_at' => time()]), LOCK_EX);
     }
 
     /**
