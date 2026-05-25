@@ -1097,8 +1097,9 @@
                 // Show success message
                 alert(lang.template_found + data.result.template);
             } else {
-                console.log('DokuLLM: No template found');
-                alert(lang.no_template_found || 'No suitable template found.');
+                const msg = (data.result && data.result.message) || lang.no_template_found || 'No suitable template found.';
+                console.log('DokuLLM: No template found:', msg);
+                alert(msg);
             }
         })
         .catch(error => {

@@ -266,12 +266,16 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         // Handle the special case of find_template action
         if ($action === 'find_template') {
             try {
+                if (!$this->getConf('enable_chromadb')) {
+                    echo json_encode(['result' => ['template' => null, 'message' => 'ChromaDB is not enabled. Enable it in the plugin settings to use template search.']]);
+                    return;
+                }
                 $searchText = $INPUT->str('text');
                 $template = $this->findTemplate($searchText);
                 if (!empty($template)) {
                     echo json_encode(['result' => ['template' => $template[0]]]);
                 } else {
-                    echo json_encode(['result' => ['template' => null]]);
+                    echo json_encode(['result' => ['template' => null, 'message' => 'No matching template found in ChromaDB. Make sure templates are indexed with type=template metadata.']]);
                 }
             } catch (Exception $e) {
                 http_status(500);
