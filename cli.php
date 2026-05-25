@@ -129,8 +129,8 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
      */
     private function sendFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
         // Create ChromaDB client
-        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, 'documents', $ollamaHost, $ollamaPort, $ollamaModel);
-        
+        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, $this->getConf('chroma_default_collection', 'documents'), $ollamaHost, $ollamaPort, $ollamaModel);
+
         if (is_dir($path)) {
             // Process directory
             $this->processDirectory($path, $chroma, $host, $port, $tenant, $database, $verbose);
@@ -161,10 +161,10 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         // Parse file path to extract metadata
         $id = \dokuwiki\plugin\dokullm\parseFilePath($filePath);
             
-        // Use the first part of the document ID as collection name, fallback to 'documents'
+        // Use the first part of the document ID as collection name, fallback to configured default
         $idParts = explode(':', $id);
-        $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : 'documents';
-        
+        $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection', 'documents');
+
         // Clean the ID and check ACL
         $cleanId = cleanID($id);
         //if (auth_quickaclcheck($cleanId) < AUTH_READ) {
@@ -253,11 +253,11 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
             $this->info("Found " . count($files) . " files to process.");
         }
         
-        // Use the first part of the document ID as collection name, fallback to 'documents'
+        // Use the first part of the document ID as collection name, fallback to configured default
         $sampleFile = $files[0];
         $id = \dokuwiki\plugin\dokullm\parseFilePath($sampleFile);
         $idParts = explode(':', $id);
-        $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : 'documents';
+        $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection', 'documents');
         
         try {
             $collectionStatus = $chroma->ensureCollectionExists($collectionName);
@@ -351,7 +351,7 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
      * If $type is set, filters results by metadata type field.
      */
     private function queryChroma($searchTerms, $limit, $host, $port, $tenant, $database, $collection, $type, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
-        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, 'documents', $ollamaHost, $ollamaPort, $ollamaModel);
+        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, $this->getConf('chroma_default_collection', 'documents'), $ollamaHost, $ollamaPort, $ollamaModel);
 
         // Resolve list of collections to query
         if ($collection) {
@@ -406,8 +406,8 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
      */
     private function checkHeartbeat($host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
         // Create ChromaDB client
-        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, 'documents', $ollamaHost, $ollamaPort, $ollamaModel);
-        
+        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, $this->getConf('chroma_default_collection', 'documents'), $ollamaHost, $ollamaPort, $ollamaModel);
+
         try {
             if ($verbose) {
                 $this->info("Checking ChromaDB server status...");
@@ -432,8 +432,8 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
      */
     private function listCollections($host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
         // Create ChromaDB client
-        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, 'documents', $ollamaHost, $ollamaPort, $ollamaModel);
-        
+        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, $this->getConf('chroma_default_collection', 'documents'), $ollamaHost, $ollamaPort, $ollamaModel);
+
         try {
             if ($verbose) {
                 $this->info("Listing ChromaDB collections...");
@@ -467,7 +467,7 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         // If no collection specified, derive it from the first part of the document ID
         if (empty($collection)) {
             $idParts = explode(':', $documentId);
-            $collection = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : 'documents';
+            $collection = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection', 'documents');
         }
         
         // Create ChromaDB client
