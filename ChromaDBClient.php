@@ -415,17 +415,13 @@ class ChromaDBClient {
         ];
         // Add where clause for metadata filtering if provided.
         // ChromaDB v2 requires operator syntax: {"field": {"$eq": "value"}}.
-        // Convert plain {"field": "value"} entries automatically.
+        // Multiple conditions must be wrapped in {"$and": [...]}.
         if ($where && is_array($where)) {
-            $normalized = [];
+            $clauses = [];
             foreach ($where as $field => $value) {
-                if (is_array($value)) {
-                    $normalized[$field] = $value; // already uses operators
-                } else {
-                    $normalized[$field] = ['$eq' => $value];
-                }
+                $clauses[] = [$field => is_array($value) ? $value : ['$eq' => $value]];
             }
-            $data['where'] = $normalized;
+            $data['where'] = count($clauses) === 1 ? $clauses[0] : ['$and' => $clauses];
         }
         // Return the response
         return $this->makeRequest($endpoint, 'POST', $data);
