@@ -221,6 +221,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
     private function processRequest()
     {
         global $INPUT, $ID;
+        // In AJAX context DokuWiki sets $ID from GET only; read POST 'id' explicitly
+        $pageId = cleanID($INPUT->str('id', '')) ?: $ID;
         // Get form data
         $action = $INPUT->str('action');
         $text = $INPUT->str('text');
@@ -271,7 +273,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                     return;
                 }
                 $searchText = $INPUT->str('text');
-                $template = $this->findTemplate($searchText);
+                $template = $this->findTemplate($searchText, $pageId);
                 if (!empty($template)) {
                     echo json_encode(['result' => ['template' => $template[0]]]);
                 } else {
@@ -323,7 +325,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             $this->getConf('provider', 'openai'),
             $this->getConf('profile', 'default'),
             $chromaClient,
-            $ID,
+            $pageId,
             $this->getConf('chroma_default_collection')
         );
         try {
@@ -467,8 +469,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      * @return array The template ID array or empty array if none found
      * @throws Exception If an error occurs during the search
      */
-    private function findTemplate($text) {
-        global $ID;
+    private function findTemplate($text, $pageId = '') {
         try {
             // Create ChromaDB client only if enabled
             $chromaClient = null;
@@ -503,7 +504,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 $this->getConf('provider', 'openai'),
                 $this->getConf('profile', 'default'),
                 $chromaClient,
-                $ID,
+                $pageId,
                 $this->getConf('chroma_default_collection')
             );
             // Query ChromaDB for the most relevant template
