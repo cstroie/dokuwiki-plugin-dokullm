@@ -252,33 +252,37 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         if ($verbose) {
             $this->info("Found " . count($files) . " files to process.");
         }
-        
-        // Use the first part of the document ID as collection name, fallback to configured default
-        $sampleFile = $files[0];
-        $id = \dokuwiki\plugin\dokullm\parseFilePath($sampleFile);
-        $idParts = explode(':', $id);
-        $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection', 'documents');
-        
-        try {
-            $collectionStatus = $chroma->ensureCollectionExists($collectionName);
-            if ($verbose) {
-                $this->info($collectionStatus);
-            }
-            $collectionChecked = true;
-        } catch (Exception $e) {
-            $collectionChecked = true;
-        }
-        
+
+        // Track which collections have already been ensured (avoid redundant API calls)
+        $ensuredCollections = [];
+
         // Process each file
         $processedCount = 0;
         $skippedCount = 0;
         $errorCount = 0;
-        
+
         foreach ($files as $file) {
             if ($verbose) {
                 $this->info("\nProcessing file: $file");
             }
-            
+
+            // Derive collection from this file's page ID
+            $fileId = \dokuwiki\plugin\dokullm\parseFilePath($file);
+            $idParts = explode(':', $fileId);
+            $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection', 'documents');
+
+            $collectionChecked = isset($ensuredCollections[$collectionName]);
+            if (!$collectionChecked) {
+                try {
+                    $collectionStatus = $chroma->ensureCollectionExists($collectionName);
+                    if ($verbose) $this->info($collectionStatus);
+                } catch (Exception $e) {
+                    // log but continue; processSingleFile will fail gracefully
+                }
+                $ensuredCollections[$collectionName] = true;
+                $collectionChecked = true;
+            }
+
             try {
                 $result = $chroma->processSingleFile($file, $collectionName, $collectionChecked);
                 
