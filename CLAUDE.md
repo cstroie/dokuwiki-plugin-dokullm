@@ -74,7 +74,7 @@ DokuLLM is a DokuWiki plugin that integrates Large Language Model (LLM) capabili
 | `chroma_port` | int | `8000` | |
 | `chroma_tenant` | string | `dokullm` | |
 | `chroma_database` | string | `dokullm` | |
-| `chroma_collection` | string | `documents` | Default collection |
+| `chroma_default_collection` | string | `documents` | Fallback collection when page ID has no first-segment (e.g. pages outside a namespace) |
 | `ollama_host` | string | `127.0.0.1` | Shared by LLM and embeddings |
 | `ollama_port` | int | `11434` | Shared by LLM and embeddings |
 | `ollama_model` | string | `llama3.2` | LLM model for the Ollama provider path |
@@ -114,7 +114,7 @@ The profile index page (`dokullm:profiles:PROFILE`) contains a DokuWiki table wi
 ### Prompt loading fallback
 
 1. Try `dokullm:profiles:{PROFILE}:{ACTION}`
-2. Fall back to `dokullm:profile:default:{ACTION}` (note the typo — `profile` not `profiles`)
+2. Fall back to `dokullm:profiles:default:{ACTION}`
 3. Throw exception if neither exists
 
 ---
@@ -143,7 +143,7 @@ reports:mri:2024:g287-name-surname           →  Format 2 (year-based)
 reports:mri:templates:name                   →  Template (type=template metadata)
 ```
 
-Chunks are indexed as `{dokuwiki_id}@{paragraph_index}`. The collection name is taken from the **first** colon-segment of the page ID.
+Chunks are indexed as `{dokuwiki_id}@{paragraph_index}`. The collection name is taken from the **first** colon-segment of the page ID (e.g. `reports:mri:...` → collection `reports`). If the page ID has no colon, `chroma_default_collection` is used as fallback.
 
 Metadata stored per chunk: `document_id`, `processed_at`, `type` (`report`|`template`), `modality`, `institution`/`year`, `name`, `registration`, `date`, `chunk_id`, `chunk_number`, `total_chunks`, `tags`.
 
@@ -169,14 +169,15 @@ Loop protection:
 ## CLI Usage
 
 ```
-./bin/plugin.php dokullm send <path>           # index file or directory into ChromaDB
-./bin/plugin.php dokullm query <search terms>
+./bin/plugin.php dokullm send <path>                    # index file or directory into ChromaDB
+./bin/plugin.php dokullm query [-c collection] [-l N] [-t type] <search terms>
 ./bin/plugin.php dokullm get <document_id>
 ./bin/plugin.php dokullm list
 ./bin/plugin.php dokullm heartbeat
-./bin/plugin.php dokullm identity
 # Add -v for verbose output
 ```
+
+Must be run as the web server user (e.g. `sudo -u www-data php ./bin/plugin.php dokullm ...`) because ChromaDB client reads DokuWiki config which requires proper file permissions.
 
 ---
 
@@ -186,24 +187,39 @@ Loop protection:
 
 All previously identified bugs have been fixed:
 
-1. ~~**`LlmClient.php` — Dead code in `getChromaDBClient()`**~~ — Fixed: removed `$chromaCollection = 'reports'; $pageId = $pageId;`, default collection changed to `'documents'`.
-
+1. ~~**`LlmClient.php` — Dead code in `getChromaDBClient()`**~~ — Fixed.
 2. ~~**Config key mismatch**~~ — Fixed: `$meta['use_tools']` renamed to `$meta['tools']`; lang files updated.
-
 3. ~~**`cli.php` — Wrong config key**~~ — Fixed: `getConf('ollama_model')` → `getConf('ollama_embeddings_model')`.
-
 4. ~~**Fallback profile path typo**~~ — Fixed: `dokullm:profile:default` → `dokullm:profiles:default` in `loadPrompt()`.
-
 5. ~~**Missing `global $ID` in `processRequest()`**~~ — Fixed: added `global $INPUT, $ID;`.
+6. ~~**`chroma_collection` config was dead**~~ — Fixed: renamed to `chroma_default_collection`; now used as actual fallback everywhere hardcoded `'documents'` appeared.
+7. ~~**`find_template` always queried wrong collection**~~ — Fixed: DokuWiki AJAX sets `$ID` from GET only; `id` is now read from `$INPUT` (which covers POST) in `processRequest()` and passed explicitly.
+8. ~~**ChromaDB multi-condition where clause rejected**~~ — Fixed: multiple filter conditions are now wrapped in `{"$and": [...]}` as ChromaDB v2 requires; single conditions use the plain `{"field": {"$eq": "val"}}` form.
+9. ~~**`DOKU_DATA` undefined warning**~~ — Fixed: `DOKU_DATA` is not defined on this DokuWiki setup; replaced with `$conf['savedir']` in `action.php` and `conf/metadata.php`.
+10. ~~**Model cache `tmp/` directory missing**~~ — Fixed: `saveModelCache()` now calls `mkdir(..., true)` before writing.
+
+### DokuWiki Environment Quirks
+
+- **`DOKU_DATA` is not defined** on this installation. Always use `$conf['savedir']` for the data directory path (no trailing slash — append `/` explicitly).
+- **`$ID` is not set from POST in AJAX context.** DokuWiki's init only populates `$ID` from GET parameters. Any AJAX handler that needs the current page ID must read it via `cleanID($INPUT->str('id'))`.
+- **`DokuWiki_CLI_Plugin`** may not be defined in all DokuWiki versions. `cli.php` provides a shim that defines the class (extending `\splitbrain\phpcli\CLI` with a `getConf()` helper) if it is missing.
+- **Do not `require_once` DokuWiki's init from `cli.php`.** `bin/plugin.php` already bootstraps DokuWiki before loading the plugin's CLI class; double-bootstrapping produces HTML error output.
+
+### ChromaDB v2 API Notes
+
+- All endpoints are under `/api/v2` (prepended by `makeRequest()`).
+- **Single-condition where**: `{"field": {"$eq": "value"}}`
+- **Multi-condition where**: `{"$and": [{"field1": {"$eq": "v1"}}, {"field2": {"$eq": "v2"}}]}` — a flat object with multiple keys is rejected with HTTP 400.
+- There is no `/identity` endpoint in ChromaDB v2.
 
 ### Disabled Code
 
-- `handleToolbar()` in `action.php` is implemented but its `register_hook` call is commented out (line 60). This means the DokuWiki native toolbar integration is inactive; the plugin uses its own custom toolbar div instead.
+- `handleToolbar()` in `action.php` is implemented but its `register_hook` call is commented out. The plugin uses its own custom toolbar div via `script.js` instead.
 
 ### Minor Issues
 
-- `ChromaDBClient::processSingleFile()` — the `total_chunks` metadata stores the total number of paragraphs *before* empty ones are filtered, not the actual number of chunks stored.
-- The `style.css` / `images/` directory is minimal; icons rely on emoji or DokuWiki's own image library via a base URL injected from JS.
+- `ChromaDBClient::processSingleFile()` — `total_chunks` metadata stores paragraph count *before* empty filtering, not the actual number of chunks stored.
+- The `style.css` / `images/` directory is minimal; icons rely on emoji or DokuWiki's own image library.
 
 ---
 

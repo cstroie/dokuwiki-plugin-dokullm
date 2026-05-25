@@ -60,7 +60,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         $controller->register_hook('AJAX_CALL_UNKNOWN', 'BEFORE', $this, 'handleAjaxModels');
         $controller->register_hook('COMMON_PAGETPL_LOAD', 'BEFORE', $this, 'handleTemplate');
         $controller->register_hook('MENU_ITEMS_ASSEMBLY', 'AFTER', $this, 'addCopyPageButton', array());
-        $controller->register_hook('INDEXER_TASKS_RUN', 'AFTER', $this, 'handlePageSave');
+        $controller->register_hook('IO_WIKIPAGE_WRITE', 'AFTER', $this, 'handlePageWrite');
+        $controller->register_hook('INDEXER_TASKS_RUN', 'AFTER', $this, 'handleIndexerTasks');
         //$controller->register_hook('TOOLBAR_DEFINE', 'AFTER', $this, 'handleToolbar', array ());
     }
 
@@ -162,7 +163,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         }
 
         $JSINFO['plugins']['dokullm'] = [
-            'enable_chromadb' => $this->getConf('enable_chromadb')
+            'enable_chromadb' => $this->getConf('enable_chromadb'),
+            'debug'           => false,
         ];
 
         // Add language strings
@@ -326,7 +328,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             $this->getConf('profile', 'default'),
             $chromaClient,
             $pageId,
-            $this->getConf('chroma_default_collection')
+            $this->getConf('chroma_default_collection'),
+            $this->getConf('think_budget', 5000)
         );
         try {
             $result = $client->process($action, $text, $metadata);
@@ -382,7 +385,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         $profile = $this->getConf('profile', 'default');
         try {
             $content = $this->getPageContent('dokullm:profiles:' . $profile);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             // If access is denied or page doesn't exist, return empty list
             \dokuwiki\Logger::error('DokuLLM: Profile page not accessible: dokullm:profiles:' . $profile);
             return [];
@@ -505,53 +508,117 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 $this->getConf('profile', 'default'),
                 $chromaClient,
                 $pageId,
-                $this->getConf('chroma_default_collection')
+                $this->getConf('chroma_default_collection'),
+                $this->getConf('think_budget', 5000)
             );
             // Query ChromaDB for the most relevant template
             $template = $client->queryChromaDBTemplate($text);
             return $template;
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             throw new Exception($this->getLang('error_finding_template') . $e->getMessage());
         }
     }
 
 
     /**
-     * Handle page save event and send page to ChromaDB
+     * Enqueue a page for ChromaDB indexing when it is written to disk.
      *
-     * This method is triggered after a page is saved and sends the page content
-     * to ChromaDB for indexing.
+     * Fires on IO_WIKIPAGE_WRITE (AFTER), which is triggered for every page
+     * save. The actual ChromaDB call happens later in handleIndexerTasks() so
+     * the save request is never delayed.
      *
-     * @param Doku_Event $event The event object
-     * @param mixed $param Additional parameters
+     * @param Doku_Event $event
+     * @param mixed $param
      */
-    public function handlePageSave(Doku_Event $event, $param)
+    public function handlePageWrite(Doku_Event $event, $param)
     {
-        global $ID;
-        // Only process if we have a valid page ID
-        if (empty($ID)) {
+        if (!$this->getConf('enable_chromadb')) return;
+
+        // event->data['id'] is available in recent DokuWiki; fall back to $ID
+        $id = $event->data['id'] ?? null;
+        if (empty($id)) {
+            global $ID;
+            $id = $ID;
+        }
+        if (empty($id)) return;
+
+        // Skip deletions (empty content written to disk)
+        if (empty(trim(rawWiki($id)))) return;
+
+        $this->enqueueForChroma($id);
+    }
+
+    /**
+     * Process one queued page per indexer tick.
+     *
+     * Fires on INDEXER_TASKS_RUN (AFTER). Pops the oldest page from the queue,
+     * sends it to ChromaDB, and sets $event->data['next'] = true so DokuWiki
+     * schedules another tick if more pages are waiting.
+     *
+     * @param Doku_Event $event
+     * @param mixed $param
+     */
+    public function handleIndexerTasks(Doku_Event $event, $param)
+    {
+        if (!$this->getConf('enable_chromadb')) return;
+
+        $file  = $this->chromaQueueFile();
+        if (!file_exists($file)) return;
+
+        $queue = json_decode(file_get_contents($file), true) ?? [];
+        if (empty($queue)) {
+            @unlink($file);
             return;
         }
 
-        // Check ACL before accessing page content
-        if (auth_quickaclcheck($ID) < AUTH_READ) {
-            // Log error but don't stop execution
-            \dokuwiki\Logger::error('DokuLLM: Access denied for page: ' . $ID);
+        $id = array_shift($queue);
+
+        // Persist remaining queue (or remove file if empty)
+        if (empty($queue)) {
+            @unlink($file);
+        } else {
+            file_put_contents($file, json_encode($queue), LOCK_EX);
+            $event->data['next'] = true; // ask DokuWiki to run the indexer again soon
+        }
+
+        // Skip deleted pages
+        $content = rawWiki($id);
+        if (empty($content)) return;
+
+        if (auth_quickaclcheck($id) < AUTH_READ) {
+            \dokuwiki\Logger::error('DokuLLM: Access denied for queued page: ' . $id);
             return;
         }
 
-        // Get the page content
-        $content = rawWiki($ID);
-        // Skip empty pages
-        if (empty($content)) {
-            return;
-        }
         try {
-            // Send page to ChromaDB
-            $this->sendPageToChromaDB($ID, $content);
-        } catch (Exception $e) {
-            // Log error but don't stop execution
-            \dokuwiki\Logger::error('DokuLLM: Error sending page to ChromaDB: ' . $e->getMessage());
+            $this->sendPageToChromaDB($id, $content);
+        } catch (\Throwable $e) {
+            \dokuwiki\Logger::error('DokuLLM: Error indexing queued page ' . $id . ': ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Return the path to the ChromaDB indexing queue file.
+     */
+    private function chromaQueueFile()
+    {
+        global $conf;
+        return $conf['savedir'] . '/tmp/plugin_dokullm_queue.json';
+    }
+
+    /**
+     * Add a page ID to the ChromaDB indexing queue (deduplicates).
+     */
+    private function enqueueForChroma($id)
+    {
+        $file = $this->chromaQueueFile();
+        $dir  = dirname($file);
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+        $queue = file_exists($file) ? (json_decode(file_get_contents($file), true) ?? []) : [];
+        if (!in_array($id, $queue, true)) {
+            $queue[] = $id;
+            file_put_contents($file, json_encode($queue), LOCK_EX);
         }
     }
 
@@ -604,7 +671,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             } else {
                 \dokuwiki\Logger::error('DokuLLM: Error sending page to ChromaDB: ' . $pageId . ' - ' . $result['message']);
             }
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             throw $e;
         }
     }
@@ -619,8 +686,9 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      * @return void
      */
     public function handleTemplate(Doku_Event &$event, $param) {
-        if (strlen($_REQUEST['copyfrom']) > 0) {
-            $template_id = $_REQUEST['copyfrom'];
+        global $INPUT;
+        $template_id = cleanID($INPUT->str('copyfrom'));
+        if ($template_id !== '') {
             if (auth_quickaclcheck($template_id) >= AUTH_READ) {
                 $tpl = io_readFile(wikiFN($template_id));
                 if ($tpl === false || $tpl === '') {
@@ -676,7 +744,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             $models = $this->fetchModels($provider);
             $this->saveModelCache($provider, $models);
             echo json_encode(['models' => $models]);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             http_status(500);
             echo json_encode(['error' => $e->getMessage()]);
         }
@@ -690,7 +758,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      */
     private function modelCacheFile($provider)
     {
-        return DOKU_DATA . 'tmp/plugin_dokullm_models_' . $provider . '.json';
+        global $conf;
+        return $conf['savedir'] . '/tmp/plugin_dokullm_models_' . $provider . '.json';
     }
 
     /**
@@ -716,7 +785,11 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
     private function saveModelCache($provider, array $models)
     {
         $file = $this->modelCacheFile($provider);
-        file_put_contents($file, json_encode(['models' => $models, 'fetched_at' => time()]));
+        $dir  = dirname($file);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        file_put_contents($file, json_encode(['models' => $models, 'fetched_at' => time()]), LOCK_EX);
     }
 
     /**
@@ -734,7 +807,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             if (!empty($models)) {
                 $this->saveModelCache($provider, $models);
             }
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             \dokuwiki\Logger::error('DokuLLM: model cache refresh failed (' . $provider . '): ' . $e->getMessage());
         }
     }

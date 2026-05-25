@@ -82,6 +82,12 @@ class LlmClient
     /** @var bool Whether to enable thinking in LLM responses */
     private $think;
 
+    /** @var bool Whether to enable tool calling */
+    private $tools;
+
+    /** @var string Prompt profile name */
+    private $profile;
+
     /** @var string The API provider: 'openai', 'anthropic', or 'ollama' */
     private $provider;
 
@@ -93,6 +99,9 @@ class LlmClient
 
     /** @var string Default ChromaDB collection when page ID provides no segment */
     private $defaultCollection;
+
+    /** @var int Anthropic extended-thinking budget in tokens */
+    private $thinkBudget;
 
     /** @var string Last user prompt sent to the LLM */
     private $lastPrompt = '';
@@ -119,7 +128,7 @@ class LlmClient
      * - chromaClient: ChromaDB client instance (optional)
      * - pageId: Page ID (optional)
      */
-    public function __construct($openai_api_url = null, $openai_api_key = null, $openai_model = null, $anthropic_api_key = null, $anthropic_model = null, $ollama_host = null, $ollama_port = null, $ollama_model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $provider = 'openai', $profile = null, $chromaClient = null, $pageId = null, $defaultCollection = 'documents')
+    public function __construct($openai_api_url = null, $openai_api_key = null, $openai_model = null, $anthropic_api_key = null, $anthropic_model = null, $ollama_host = null, $ollama_port = null, $ollama_model = null, $timeout = null, $temperature = null, $top_p = null, $top_k = null, $min_p = null, $think = null, $tools = null, $provider = 'openai', $profile = null, $chromaClient = null, $pageId = null, $defaultCollection = 'documents', $thinkBudget = 5000)
     {
         $this->openai_api_url      = $openai_api_url;
         $this->openai_api_key      = $openai_api_key;
@@ -141,6 +150,7 @@ class LlmClient
         $this->chromaClient        = $chromaClient;
         $this->pageId              = $pageId;
         $this->defaultCollection   = $defaultCollection ?: 'documents';
+        $this->thinkBudget         = max(1024, (int)$thinkBudget);
     }
 
     public function getLastPrompt(): string { return $this->lastPrompt; }
@@ -240,7 +250,6 @@ class LlmClient
             'max_tokens' => 6144,
             'stream' => false,
             'keep_alive' => '30m',
-            'think' => true
         ];
 
         // Add tools to the request only if useTools is true
@@ -262,6 +271,10 @@ class LlmClient
         }
         if ($this->min_p !== null) {
             $data['min_p'] = $this->min_p;
+        }
+        // 'think' is an Ollama-ism passed through the OpenAI-compat endpoint
+        if ($this->think) {
+            $data['think'] = true;
         }
 
         return $this->callOpenAIAPIWithTools($data, false);
@@ -334,8 +347,7 @@ class LlmClient
 
         // Extract the content from the response if available
         if (isset($result['choices'][0]['message']['content'])) {
-            $content = trim($result['choices'][0]['message']['content']);
-            // Reset tool call counts when we get final content
+            $content = $this->stripThinkTags(trim($result['choices'][0]['message']['content']));
             $this->toolCallCounts = [];
             return $content;
         }
@@ -569,7 +581,7 @@ class LlmClient
             // top_p, top_k, and min_p must not be sent in this mode.
             $data['thinking'] = [
                 'type'          => 'enabled',
-                'budget_tokens' => 5000,
+                'budget_tokens' => $this->thinkBudget,
             ];
             $data['temperature'] = 1.0;
         } else {
@@ -901,7 +913,7 @@ class LlmClient
         // Final text response
         if (!empty($content) && empty($toolCalls)) {
             $this->toolCallCounts = [];
-            return $content;
+            return $this->stripThinkTags($content);
         }
 
         // Tool use response
@@ -1510,4 +1522,18 @@ class LlmClient
         return $templateIds;
     }
 
+    /**
+     * Strip <think>...</think> blocks from LLM output.
+     *
+     * Ollama and some OpenAI-compatible models embed reasoning inside <think>
+     * tags in the text content field. Anthropic uses typed content blocks and
+     * is handled separately, so this helper is only needed for OpenAI/Ollama.
+     *
+     * @param string $text Raw LLM response text
+     * @return string Text with thinking blocks removed and whitespace trimmed
+     */
+    private function stripThinkTags($text)
+    {
+        return trim(preg_replace('/<think>.*?<\/think>/si', '', $text));
+    }
 }

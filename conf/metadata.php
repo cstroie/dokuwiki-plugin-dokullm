@@ -13,8 +13,9 @@
  * longer returned by the provider (avoids multichoice validation failures).
  */
 function _dokullm_model_choices($provider, $current) {
-    if (!defined('DOKU_DATA')) return null;
-    $file = DOKU_DATA . 'tmp/plugin_dokullm_models_' . $provider . '.json';
+    global $conf;
+    if (empty($conf['savedir'])) return null;
+    $file = $conf['savedir'] . '/tmp/plugin_dokullm_models_' . $provider . '.json';
     if (!file_exists($file)) return null;
     $data = json_decode(file_get_contents($file), true);
     $models = $data['models'] ?? [];
@@ -198,6 +199,11 @@ $meta['replace_id'] = array('onoff');
  * @var array
  */
 $meta['think'] = array('onoff');
+
+/**
+ * Metadata for the think_budget configuration option
+ */
+$meta['think_budget'] = array('numeric', '_min' => 1024);
 
 /**
  * Metadata for the tools configuration option
