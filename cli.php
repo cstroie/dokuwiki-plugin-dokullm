@@ -46,8 +46,8 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         $options->registerArgument('path', 'File or directory path', true, 'send');
 
         $options->registerCommand('query', 'Query ChromaDB');
-        //$options->registerOption('collection', 'Collection name to query', 'c', 'collection', 'documents', 'query');
-        //$options->registerOption('limit', 'Number of results to return', 'l', 'limit', '5', 'query');
+        $options->registerOption('collection', 'Collection name to query (default: all collections)', 'c', 'collection', 'query');
+        $options->registerOption('limit', 'Number of results to return', 'l', 'limit', 'query');
         $options->registerArgument('search', 'Search terms', true, 'query');
 
         $options->registerCommand('heartbeat', 'Check if ChromaDB server is alive');
@@ -94,8 +94,8 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
                 if (!$searchTerms) {
                     $this->fatal('Missing search terms for query action');
                 }
-                $collection = $options->getOpt('collection', 'documents');
-                $limit = (int)$options->getOpt('limit', 5);
+                $collection = $options->getOpt('collection') ?: null;
+                $limit = (int)($options->getOpt('limit') ?: 5);
                 $this->queryChroma($searchTerms, $limit, $host, $port, $tenant, $database, $collection, $ollamaHost, $ollamaPort, $ollamaModel, $verbose);
                 break;
 
@@ -345,41 +345,54 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
 
     /**
      * Query ChromaDB for similar documents
+     * If $collection is null, queries all available collections.
      */
     private function queryChroma($searchTerms, $limit, $host, $port, $tenant, $database, $collection, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
-        // Create ChromaDB client
-        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, $collection, $ollamaHost, $ollamaPort, $ollamaModel);
-        
-        try {
-            // Query the specified collection by collection
-            $results = $chroma->queryCollection($collection, [$searchTerms], $limit);
-            
-            $this->info("Query results for: \"$searchTerms\"");
-            $this->info("Host: $host:$port");
-            $this->info("Tenant: $tenant");
-            $this->info("Database: $database");
-            $this->info("Collection: $collection");
-            $this->info("==========================================");
-            
-            if (empty($results['ids'][0])) {
-                $this->info("No results found.");
+        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, 'documents', $ollamaHost, $ollamaPort, $ollamaModel);
+
+        // Resolve list of collections to query
+        if ($collection) {
+            $collections = [$collection];
+        } else {
+            try {
+                $all = $chroma->listCollections();
+                $collections = array_map(fn($c) => $c['name'], $all);
+            } catch (Exception $e) {
+                $this->error("Error listing collections: " . $e->getMessage());
                 return;
             }
-            
-            for ($i = 0; $i < count($results['ids'][0]); $i++) {
-                $this->info("Result " . ($i + 1) . ":");
-                $this->info("  ID: " . $results['ids'][0][$i]);
-                $this->info("  Distance: " . $results['distances'][0][$i]);
-                $this->info("  Document: " . substr($results['documents'][0][$i], 0, 255) . "...");
-                
-                if (isset($results['metadatas'][0][$i])) {
-                    $this->info("  Metadata: " . json_encode($results['metadatas'][0][$i]));
-                }
-                $this->info("");
+            if (empty($collections)) {
+                $this->error("No collections found in ChromaDB.");
+                return;
             }
-        } catch (Exception $e) {
-            $this->error("Error querying ChromaDB: " . $e->getMessage());
-            return;
+        }
+
+        $this->info("Query: \"$searchTerms\"");
+        $this->info("==========================================");
+
+        foreach ($collections as $col) {
+            try {
+                $results = $chroma->queryCollection($col, [$searchTerms], $limit);
+            } catch (Exception $e) {
+                $this->error("Collection '$col': " . $e->getMessage());
+                continue;
+            }
+
+            if (empty($results['ids'][0])) {
+                if ($verbose) $this->info("Collection '$col': no results.");
+                continue;
+            }
+
+            $this->info("Collection: $col");
+            for ($i = 0; $i < count($results['ids'][0]); $i++) {
+                $this->info("  [" . ($i + 1) . "] " . $results['ids'][0][$i]);
+                $this->info("      Distance : " . $results['distances'][0][$i]);
+                $this->info("      Snippet  : " . substr($results['documents'][0][$i], 0, 200) . "…");
+                if ($verbose && isset($results['metadatas'][0][$i])) {
+                    $this->info("      Metadata : " . json_encode($results['metadatas'][0][$i]));
+                }
+            }
+            $this->info("");
         }
     }
 
