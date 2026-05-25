@@ -240,7 +240,6 @@ class LlmClient
             'max_tokens' => 6144,
             'stream' => false,
             'keep_alive' => '30m',
-            'think' => true
         ];
 
         // Add tools to the request only if useTools is true
@@ -262,6 +261,10 @@ class LlmClient
         }
         if ($this->min_p !== null) {
             $data['min_p'] = $this->min_p;
+        }
+        // 'think' is an Ollama-ism passed through the OpenAI-compat endpoint
+        if ($this->think) {
+            $data['think'] = true;
         }
 
         return $this->callOpenAIAPIWithTools($data, false);
