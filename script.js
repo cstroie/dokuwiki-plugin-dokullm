@@ -415,10 +415,10 @@
         })
         .then(data => {
             if (data.error) {
-                console.log('DokuLLM: Error from backend:', data.error);
+                console.error('DokuLLM: Error from backend:', data.error);
                 throw new Error(data.error);
             }
-            
+
             console.log('DokuLLM: Processing successful, result length:', data.result.length);
             
             // Remove some part
@@ -472,7 +472,7 @@
             }
         })
         .catch(error => {
-            console.log('DokuLLM: Error during processing:', error.message);
+            console.error('DokuLLM: Error during processing:', error.message);
             alert('Error: ' + error.message);
         })
         .finally(() => {
@@ -787,10 +787,10 @@
         })
         .then(data => {
             if (data.error) {
-                console.log('DokuLLM: Error from backend for custom prompt:', data.error);
+                console.error('DokuLLM: Error from backend for custom prompt:', data.error);
                 throw new Error(data.error);
             }
-            
+
             console.log('DokuLLM: Custom prompt processing successful, result length:', data.result.length);
             // Remove some part
             const [thinkingContent, cleanedResult] = removeBetweenXmlTags(data.result, 'think');
@@ -845,8 +845,8 @@
             }
         })
         .catch(error => {
-            console.log('DokuLLM: Error during custom prompt processing:', error.message);
-            alert((lang.backend_error || 'Network response was not ok: ') + error.message);
+            console.error('DokuLLM: Error during custom prompt processing:', error.message);
+            alert((lang.backend_error || 'Error: ') + error.message);
         })
         .finally(() => {
             console.log('DokuLLM: Resetting send button and enabling editor');
@@ -1079,32 +1079,34 @@
             body: formData
         })
         .then(response => {
-            console.log('DokuLLM: Received template search response');
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status + ' ' + response.statusText);
+            }
             return response.json();
         })
         .then(data => {
             if (data.error) {
-                console.log('DokuLLM: Error finding template:', data.error);
+                console.error('DokuLLM: Error finding template:', data.error);
                 throw new Error(data.error);
             }
-            
+
             if (data.result && data.result.template) {
                 console.log('DokuLLM: Template found:', data.result.template);
                 // Insert template metadata at the top of the text, but after title if present
                 const metadataLine = `~~LLM_TEMPLATE:${data.result.template}~~`;
                 editor.value = insertMetadataAfterTitle(editor.value, metadataLine);
-                    
+
                 // Show success message
-                alert(lang.template_found + data.result.template);
+                alert(lang.template_found + ' ' + data.result.template);
             } else {
                 const msg = (data.result && data.result.message) || lang.no_template_found || 'No suitable template found.';
-                console.log('DokuLLM: No template found:', msg);
+                console.warn('DokuLLM: No template found:', msg);
                 alert(msg);
             }
         })
         .catch(error => {
-            console.log('DokuLLM: Error during template search:', error.message);
-            alert((lang.backend_error || 'Network response was not ok: ') + error.message);
+            console.error('DokuLLM: Error during template search:', error.message);
+            alert((lang.backend_error || 'Error: ') + error.message);
         })
         .finally(() => {
             console.log('DokuLLM: Restoring toolbar and enabling editor');
@@ -1165,29 +1167,31 @@
             body: formData
         })
         .then(response => {
-            console.log('DokuLLM: Received template response');
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status + ' ' + response.statusText);
+            }
             return response.json();
         })
         .then(data => {
             if (data.error) {
-                console.log('DokuLLM: Error retrieving template:', data.error);
+                console.error('DokuLLM: Error retrieving template:', data.error);
                 throw new Error(data.error);
             }
-            
+
             console.log('DokuLLM: Template retrieved successfully, content length:', data.result.content.length);
             // Insert template content at cursor position or at the beginning
             const cursorPos = editor.selectionStart;
             const text = editor.value;
             editor.value = text.substring(0, cursorPos) + data.result.content + text.substring(cursorPos);
-            
+
             // Set cursor position after inserted content
             const newCursorPos = cursorPos + data.result.content.length;
             editor.setSelectionRange(newCursorPos, newCursorPos);
             editor.focus();
         })
         .catch(error => {
-            console.log('DokuLLM: Error during template insertion:', error.message);
-            alert((lang.backend_error || 'Network response was not ok: ') + error.message);
+            console.error('DokuLLM: Error during template insertion:', error.message);
+            alert((lang.backend_error || 'Error: ') + error.message);
         })
         .finally(() => {
             console.log('DokuLLM: Restoring toolbar and enabling editor');

@@ -313,6 +313,9 @@ class LlmClient
 
         // Parse and validate the JSON response
         $result = json_decode($response, true);
+        if (!is_array($result)) {
+            throw new Exception('OpenAI API returned invalid JSON: ' . substr($response, 0, 200));
+        }
 
         // Extract the content from the response if available
         if (isset($result['choices'][0]['message']['content'])) {
@@ -618,6 +621,9 @@ class LlmClient
         }
 
         $result = json_decode($response, true);
+        if (!is_array($result)) {
+            throw new Exception('Anthropic API returned invalid JSON: ' . substr($response, 0, 200));
+        }
 
         // Parse typed content blocks
         $textContent   = '';
@@ -853,7 +859,10 @@ class LlmClient
             throw new Exception('Ollama API request failed with HTTP code: ' . $httpCode . ' - ' . $response);
         }
 
-        $result     = json_decode($response, true);
+        $result = json_decode($response, true);
+        if (!is_array($result)) {
+            throw new Exception('Ollama API returned invalid JSON: ' . substr($response, 0, 200));
+        }
         $message    = $result['message'] ?? [];
         $content    = $message['content']    ?? '';
         $toolCalls  = $message['tool_calls'] ?? [];
@@ -1099,8 +1108,8 @@ class LlmClient
                     $systemPrompt .= "\n" . $commandSystemPrompt;
                 }
             } catch (Exception $e) {
-                // Ignore exceptions when loading command-specific system prompt
-                // This allows the main system prompt to still be used
+                // Command-specific system prompt is optional; log but continue with base prompt
+                \dokuwiki\Logger::debug('DokuLLM: No command-specific system prompt for action "' . $action . '": ' . $e->getMessage());
             }
         }
 
@@ -1167,7 +1176,9 @@ class LlmClient
         $pageFile = wikiFN($targetPageId);
         if (file_exists($pageFile)) {
             $timestamp = filemtime($pageFile);
-            return date('Y-m-d', $timestamp);
+            if ($timestamp !== false) {
+                return date('Y-m-d', $timestamp);
+            }
         }
 
         // Return empty string if no date can be determined
@@ -1404,8 +1415,7 @@ class LlmClient
 
             return $documentIds;
         } catch (Exception $e) {
-            // Log error but don't fail the operation
-            error_log('ChromaDB query failed: ' . $e->getMessage());
+            \dokuwiki\Logger::error('DokuLLM: ChromaDB query failed: ' . $e->getMessage());
             return [];
         }
     }
@@ -1439,8 +1449,7 @@ class LlmClient
 
             return $snippets;
         } catch (Exception $e) {
-            // Log error but don't fail the operation
-            error_log('ChromaDB query failed: ' . $e->getMessage());
+            \dokuwiki\Logger::error('DokuLLM: ChromaDB snippets query failed: ' . $e->getMessage());
             return [];
         }
     }

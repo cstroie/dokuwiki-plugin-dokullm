@@ -612,6 +612,10 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             $template_id = $_REQUEST['copyfrom'];
             if (auth_quickaclcheck($template_id) >= AUTH_READ) {
                 $tpl = io_readFile(wikiFN($template_id));
+                if ($tpl === false || $tpl === '') {
+                    \dokuwiki\Logger::error('DokuLLM: Template file could not be read: ' . $template_id);
+                    return;
+                }
                 if ($this->getConf('replace_id')) {
                     $id = $event->data['id'];
                     $tpl = str_replace($template_id, $id, $tpl);
@@ -622,6 +626,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 }
                 $event->data['tpl'] = $tpl;
                 $event->preventDefault();
+            } else {
+                \dokuwiki\Logger::warn('DokuLLM: Access denied to template page: ' . $template_id);
             }
         }
     }
