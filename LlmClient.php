@@ -337,8 +337,7 @@ class LlmClient
 
         // Extract the content from the response if available
         if (isset($result['choices'][0]['message']['content'])) {
-            $content = trim($result['choices'][0]['message']['content']);
-            // Reset tool call counts when we get final content
+            $content = $this->stripThinkTags(trim($result['choices'][0]['message']['content']));
             $this->toolCallCounts = [];
             return $content;
         }
@@ -904,7 +903,7 @@ class LlmClient
         // Final text response
         if (!empty($content) && empty($toolCalls)) {
             $this->toolCallCounts = [];
-            return $content;
+            return $this->stripThinkTags($content);
         }
 
         // Tool use response
@@ -1513,4 +1512,18 @@ class LlmClient
         return $templateIds;
     }
 
+    /**
+     * Strip <think>...</think> blocks from LLM output.
+     *
+     * Ollama and some OpenAI-compatible models embed reasoning inside <think>
+     * tags in the text content field. Anthropic uses typed content blocks and
+     * is handled separately, so this helper is only needed for OpenAI/Ollama.
+     *
+     * @param string $text Raw LLM response text
+     * @return string Text with thinking blocks removed and whitespace trimmed
+     */
+    private function stripThinkTags($text)
+    {
+        return trim(preg_replace('/<think>.*?<\/think>/si', '', $text));
+    }
 }
