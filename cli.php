@@ -4,15 +4,10 @@ use splitbrain\phpcli\Options;
 
 if (!defined('DOKU_INC')) define('DOKU_INC', realpath(dirname(__FILE__) . '/../../../') . '/');
 
-// Compatibility shim: older DokuWiki uses DokuWiki_CLI_Plugin, newer uses dokuwiki\Extension\CLIPlugin
-if (!class_exists('dokuwiki\Extension\CLIPlugin') && class_exists('DokuWiki_CLI_Plugin')) {
-    class_alias('DokuWiki_CLI_Plugin', 'dokuwiki\Extension\CLIPlugin');
-}
-
 /**
  * DokuWiki CLI plugin for ChromaDB operations
  */
-class cli_plugin_dokullm extends \dokuwiki\Extension\CLIPlugin {
+class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
 
     /**
      * Register options and arguments
