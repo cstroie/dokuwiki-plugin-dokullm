@@ -91,6 +91,12 @@ class LlmClient
     /** @var string|null Page ID */
     private $pageId;
 
+    /** @var string Last user prompt sent to the LLM */
+    private $lastPrompt = '';
+
+    /** @var string Last system prompt sent to the LLM */
+    private $lastSystemPrompt = '';
+
     /**
      * Initialize the LLM client with configuration settings
      *
@@ -133,6 +139,9 @@ class LlmClient
         $this->pageId = $pageId;
     }
 
+    public function getLastPrompt(): string { return $this->lastPrompt; }
+    public function getLastSystemPrompt(): string { return $this->lastSystemPrompt; }
+
     public function process($action, $text, $metadata = [])
     {
         // Store the current text for tool usage
@@ -163,6 +172,7 @@ class LlmClient
 
         // Load the prompt
         $prompt = $this->loadPrompt($action, $metadata);
+        $this->lastPrompt = $prompt;
 
         // Call the API
         return $this->callAPI($action, $prompt, $metadata, $this->tools);
@@ -184,6 +194,7 @@ class LlmClient
     {
         // Load system prompt which provides general instructions to the LLM
         $systemPrompt = $this->loadSystemPrompt($command, []);
+        $this->lastSystemPrompt = $systemPrompt;
 
         // Dispatch to the appropriate provider
         if ($this->provider === 'anthropic') {
@@ -489,12 +500,20 @@ class LlmClient
                 break;
 
             case 'get_template':
-                $toolResponse['content'] = $this->getTemplateContent();
+                try {
+                    $toolResponse['content'] = $this->getTemplateContent();
+                } catch (Exception $e) {
+                    $toolResponse['content'] = 'ChromaDB error retrieving template: ' . $e->getMessage();
+                }
                 break;
 
             case 'get_examples':
-                $count = isset($arguments['count']) ? (int)$arguments['count'] : 5;
-                $toolResponse['content'] = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                try {
+                    $count = isset($arguments['count']) ? (int)$arguments['count'] : 5;
+                    $toolResponse['content'] = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                } catch (Exception $e) {
+                    $toolResponse['content'] = 'ChromaDB error retrieving examples: ' . $e->getMessage();
+                }
                 break;
 
             default:
@@ -743,12 +762,20 @@ class LlmClient
                     break;
 
                 case 'get_template':
-                    $content = $this->getTemplateContent();
+                    try {
+                        $content = $this->getTemplateContent();
+                    } catch (Exception $e) {
+                        $content = 'ChromaDB error retrieving template: ' . $e->getMessage();
+                    }
                     break;
 
                 case 'get_examples':
-                    $count = isset($arguments['count']) ? (int)$arguments['count'] : 5;
-                    $content = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                    try {
+                        $count = isset($arguments['count']) ? (int)$arguments['count'] : 5;
+                        $content = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                    } catch (Exception $e) {
+                        $content = 'ChromaDB error retrieving examples: ' . $e->getMessage();
+                    }
                     break;
 
                 default:
@@ -950,12 +977,20 @@ class LlmClient
                     break;
 
                 case 'get_template':
-                    $content = $this->getTemplateContent();
+                    try {
+                        $content = $this->getTemplateContent();
+                    } catch (Exception $e) {
+                        $content = 'ChromaDB error retrieving template: ' . $e->getMessage();
+                    }
                     break;
 
                 case 'get_examples':
-                    $count   = isset($arguments['count']) ? (int)$arguments['count'] : 5;
-                    $content = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                    try {
+                        $count   = isset($arguments['count']) ? (int)$arguments['count'] : 5;
+                        $content = '<examples>\n' . $this->getSnippets($count) . '\n</examples>';
+                    } catch (Exception $e) {
+                        $content = 'ChromaDB error retrieving examples: ' . $e->getMessage();
+                    }
                     break;
 
                 default:
@@ -1398,26 +1433,16 @@ class LlmClient
      */
     private function queryChromaDB($text, $limit = 5, $where = null)
     {
-        try {
-            // Get ChromaDB client and collection name
-            list($chromaClient, $chromaCollection) = $this->getChromaDBClient();
-            // Query for similar documents
-            $results = $chromaClient->queryCollection($chromaCollection, [$text], $limit, $where);
+        list($chromaClient, $chromaCollection) = $this->getChromaDBClient();
+        $results = $chromaClient->queryCollection($chromaCollection, [$text], $limit, $where);
 
-            // Extract document IDs from results
-            $documentIds = [];
-            if (isset($results['ids'][0]) && is_array($results['ids'][0])) {
-                foreach ($results['ids'][0] as $id) {
-                    // Use the ChromaDB ID directly without conversion
-                    $documentIds[] = $id;
-                }
+        $documentIds = [];
+        if (isset($results['ids'][0]) && is_array($results['ids'][0])) {
+            foreach ($results['ids'][0] as $id) {
+                $documentIds[] = $id;
             }
-
-            return $documentIds;
-        } catch (Exception $e) {
-            \dokuwiki\Logger::error('DokuLLM: ChromaDB query failed: ' . $e->getMessage());
-            return [];
         }
+        return $documentIds;
     }
 
     /**
@@ -1433,25 +1458,16 @@ class LlmClient
      */
     private function queryChromaDBSnippets($text, $limit = 10, $where = null)
     {
-        try {
-            // Get ChromaDB client and collection name
-            list($chromaClient, $chromaCollection) = $this->getChromaDBClient();
-            // Query for similar documents
-            $results = $chromaClient->queryCollection($chromaCollection, [$text], $limit, $where);
+        list($chromaClient, $chromaCollection) = $this->getChromaDBClient();
+        $results = $chromaClient->queryCollection($chromaCollection, [$text], $limit, $where);
 
-            // Extract document texts from results
-            $snippets = [];
-            if (isset($results['documents'][0]) && is_array($results['documents'][0])) {
-                foreach ($results['documents'][0] as $document) {
-                    $snippets[] = $document;
-                }
+        $snippets = [];
+        if (isset($results['documents'][0]) && is_array($results['documents'][0])) {
+            foreach ($results['documents'][0] as $document) {
+                $snippets[] = $document;
             }
-
-            return $snippets;
-        } catch (Exception $e) {
-            \dokuwiki\Logger::error('DokuLLM: ChromaDB snippets query failed: ' . $e->getMessage());
-            return [];
         }
+        return $snippets;
     }
 
     /**

@@ -204,7 +204,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         $event->stopPropagation();
         $event->preventDefault();
 
-        // Handle the AJAX request
+        header('Content-Type: application/json; charset=utf-8');
         $this->processRequest();
     }
 
@@ -242,7 +242,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
             try {
                 $actions = $this->getActions();
                 echo json_encode(['result' => $actions]);
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 http_status(500);
                 echo json_encode(['error' => $e->getMessage()]);
             }
@@ -257,7 +257,7 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                     throw new Exception($this->getLang('template_not_found') . $templateId);
                 }
                 echo json_encode(['result' => ['content' => $templateContent]]);
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 http_status(500);
                 echo json_encode(['error' => $e->getMessage()]);
             }
@@ -277,7 +277,8 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
                 } else {
                     echo json_encode(['result' => ['template' => null, 'message' => 'No matching template found in ChromaDB. Make sure templates are indexed with type=template metadata.']]);
                 }
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
+                \dokuwiki\Logger::error('DokuLLM find_template: ' . $e->getMessage());
                 http_status(500);
                 echo json_encode(['error' => $e->getMessage()]);
             }
@@ -326,8 +327,15 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
         );
         try {
             $result = $client->process($action, $text, $metadata);
-            echo json_encode(['result' => $result]);
-        } catch (Exception $e) {
+            echo json_encode([
+                'result' => $result,
+                'debug'  => [
+                    'system' => $client->getLastSystemPrompt(),
+                    'prompt' => $client->getLastPrompt(),
+                ]
+            ]);
+        } catch (\Throwable $e) {
+            \dokuwiki\Logger::error('DokuLLM processRequest: ' . $e->getMessage());
             http_status(500);
             echo json_encode(['error' => $e->getMessage()]);
         }

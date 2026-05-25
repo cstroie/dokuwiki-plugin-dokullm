@@ -420,7 +420,13 @@
             }
 
             console.log('DokuLLM: Processing successful, result length:', data.result.length);
-            
+            if (data.debug) {
+                console.groupCollapsed('DokuLLM debug: prompts');
+                console.log('System:', data.debug.system);
+                console.log('Prompt:', data.debug.prompt);
+                console.groupEnd();
+            }
+
             // Remove some part
             const [thinkingContent, cleanedResult] = removeBetweenXmlTags(data.result, 'think');
 
@@ -792,6 +798,12 @@
             }
 
             console.log('DokuLLM: Custom prompt processing successful, result length:', data.result.length);
+            if (data.debug) {
+                console.groupCollapsed('DokuLLM debug: prompts');
+                console.log('System:', data.debug.system);
+                console.log('Prompt:', data.debug.prompt);
+                console.groupEnd();
+            }
             // Remove some part
             const [thinkingContent, cleanedResult] = removeBetweenXmlTags(data.result, 'think');
             
@@ -1064,15 +1076,20 @@
         editor.readOnly = true;
         console.log('DokuLLM: Showing loading indicator for template search');
         
-        // Get the current text to use for template search
-        const currentText = editor.value;
-        
+        // Use text selection if available, otherwise fall back to full textarea
+        const selStart = editor.selectionStart;
+        const selEnd   = editor.selectionEnd;
+        const searchText = (selStart !== selEnd)
+            ? editor.value.substring(selStart, selEnd)
+            : editor.value;
+
         // Send AJAX request to find template
-        console.log('DokuLLM: Sending AJAX request to find template');
+        console.log('DokuLLM: Sending AJAX request to find template' + (selStart !== selEnd ? ' (using selection)' : ''));
         const formData = new FormData();
         formData.append('call', 'plugin_dokullm');
         formData.append('action', 'find_template');
-        formData.append('text', currentText);
+        formData.append('text', searchText);
+        formData.append('id', typeof JSINFO !== 'undefined' ? JSINFO.id : '');
         
         fetch(DOKU_BASE + 'lib/exe/ajax.php', {
             method: 'POST',
