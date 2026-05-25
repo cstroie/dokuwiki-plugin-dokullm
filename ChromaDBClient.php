@@ -413,9 +413,19 @@ class ChromaDBClient {
             'query_embeddings' => $queryEmbeddings,
             'n_results' => $nResults
         ];
-        // Add where clause for metadata filtering if provided
+        // Add where clause for metadata filtering if provided.
+        // ChromaDB v2 requires operator syntax: {"field": {"$eq": "value"}}.
+        // Convert plain {"field": "value"} entries automatically.
         if ($where && is_array($where)) {
-            $data['where'] = $where;
+            $normalized = [];
+            foreach ($where as $field => $value) {
+                if (is_array($value)) {
+                    $normalized[$field] = $value; // already uses operators
+                } else {
+                    $normalized[$field] = ['$eq' => $value];
+                }
+            }
+            $data['where'] = $normalized;
         }
         // Return the response
         return $this->makeRequest($endpoint, 'POST', $data);
