@@ -10,6 +10,10 @@ $lang['openai_api_key']    = 'OpenAI API Key';
 $lang['openai_model']      = 'OpenAI Model Name';
 $lang['anthropic_api_key'] = 'Anthropic API Key';
 $lang['anthropic_model']   = 'Anthropic Model Name';
+$lang['ollama_host']             = 'Ollama Host - The hostname or IP address of your Ollama server';
+$lang['ollama_port']             = 'Ollama Port - The port number on which Ollama is running';
+$lang['ollama_model']            = 'Ollama LLM Model - Model used for text generation (provider = ollama)';
+$lang['ollama_embeddings_model'] = 'Ollama Embeddings Model - The model name used for generating text embeddings';
 $lang['timeout'] = 'Request Timeout (seconds)';
 $lang['profile'] = 'Prompt Profile';
 $lang['temperature'] = 'Temperature (0.0-1.0) - Lower values make output more focused';
@@ -26,7 +30,3 @@ $lang['chroma_port'] = 'ChromaDB Port - The port number on which ChromaDB is run
 $lang['chroma_tenant'] = 'ChromaDB Tenant - The tenant name for ChromaDB organization';
 $lang['chroma_database'] = 'ChromaDB Database - The database name within the ChromaDB tenant';
 $lang['chroma_collection'] = 'ChromaDB Collection - The default collection name for document storage';
-$lang['ollama_host']             = 'Ollama Host - The hostname or IP address of your Ollama server';
-$lang['ollama_port']             = 'Ollama Port - The port number on which Ollama is running';
-$lang['ollama_model']            = 'Ollama LLM Model - Model used for text generation (provider = ollama)';
-$lang['ollama_embeddings_model'] = 'Ollama Embeddings Model - The model name used for generating text embeddings';

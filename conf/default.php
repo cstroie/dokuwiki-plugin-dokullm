@@ -68,6 +68,46 @@ $conf['anthropic_api_key'] = '';
 $conf['anthropic_model'] = 'claude-sonnet-4-6';
 
 /**
+ * Ollama Host
+ * 
+ * The hostname or IP address of your Ollama server.
+ * Used for generating embeddings for document search.
+ * 
+ * @var string
+ */
+$conf['ollama_host'] = '127.0.0.1';
+
+/**
+ * Ollama Port
+ * 
+ * The port number on which Ollama is running.
+ * Default Ollama port is 11434.
+ * 
+ * @var int
+ */
+$conf['ollama_port'] = 11434;
+
+/**
+ * Ollama LLM model identifier
+ *
+ * Model used for text generation when provider is 'ollama'.
+ * Uses the same ollama_host / ollama_port as the embeddings service.
+ *
+ * @var string
+ */
+$conf['ollama_model'] = 'llama3.2';
+
+/**
+ * Ollama Embeddings Model
+ *
+ * The model name used for generating text embeddings.
+ * Embeddings are used for semantic search in ChromaDB.
+ *
+ * @var string
+ */
+$conf['ollama_embeddings_model'] = 'nomic-embed-text';
+
+/**
  * The request timeout in seconds
  * 
  * Maximum time to wait for a response from the LLM API before timing out.
@@ -232,44 +272,3 @@ $conf['chroma_database'] = 'dokullm';
  * @var string
  */
 $conf['chroma_default_collection'] = 'documents';
-
-/**
- * Ollama Host
- * 
- * The hostname or IP address of your Ollama server.
- * Used for generating embeddings for document search.
- * 
- * @var string
- */
-$conf['ollama_host'] = '127.0.0.1';
-
-/**
- * Ollama Port
- * 
- * The port number on which Ollama is running.
- * Default Ollama port is 11434.
- * 
- * @var int
- */
-$conf['ollama_port'] = 11434;
-
-/**
- * Ollama LLM model identifier
- *
- * Model used for text generation when provider is 'ollama'.
- * Uses the same ollama_host / ollama_port as the embeddings service.
- *
- * @var string
- */
-$conf['ollama_model'] = 'llama3.2';
-
-/**
- * Ollama Embeddings Model
- *
- * The model name used for generating text embeddings.
- * Embeddings are used for semantic search in ChromaDB.
- *
- * @var string
- */
-$conf['ollama_embeddings_model'] = 'nomic-embed-text';
-

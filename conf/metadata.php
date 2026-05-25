@@ -75,6 +75,42 @@ $_am = _dokullm_model_choices('anthropic', $conf['plugin']['dokullm']['anthropic
 $meta['anthropic_model'] = $_am ? array('multichoice', '_choices' => $_am) : array('string');
 
 /**
+ * Metadata for the Ollama host configuration option
+ * 
+ * Defines the Ollama host as a string input field in the configuration interface.
+ * 
+ * @var array
+ */
+$meta['ollama_host'] = array('string');
+
+/**
+ * Metadata for the Ollama port configuration option
+ * 
+ * Defines the Ollama port as a numeric input field.
+ * 
+ * @var array
+ */
+$meta['ollama_port'] = array('numeric');
+
+/**
+ * Metadata for the Ollama LLM model configuration option
+ * Rendered as a dropdown when a cached model list is available.
+ *
+ * @var array
+ */
+$_lm = _dokullm_model_choices('ollama', $conf['plugin']['dokullm']['ollama_model'] ?? '');
+$meta['ollama_model'] = $_lm ? array('multichoice', '_choices' => $_lm) : array('string');
+
+/**
+ * Metadata for the Ollama embeddings model configuration option
+ * Rendered as a dropdown when a cached model list is available.
+ *
+ * @var array
+ */
+$_em = _dokullm_model_choices('ollama_embeddings', $conf['plugin']['dokullm']['ollama_embeddings_model'] ?? '');
+$meta['ollama_embeddings_model'] = $_em ? array('multichoice', '_choices' => $_em) : array('string');
+
+/**
  * Metadata for the timeout configuration option
  * 
  * Defines the timeout value as a numeric input field with a minimum value of 5 seconds.
@@ -226,39 +262,3 @@ $meta['chroma_database'] = array('string');
  * @var array
  */
 $meta['chroma_default_collection'] = array('string');
-
-/**
- * Metadata for the Ollama host configuration option
- * 
- * Defines the Ollama host as a string input field in the configuration interface.
- * 
- * @var array
- */
-$meta['ollama_host'] = array('string');
-
-/**
- * Metadata for the Ollama port configuration option
- * 
- * Defines the Ollama port as a numeric input field.
- * 
- * @var array
- */
-$meta['ollama_port'] = array('numeric');
-
-/**
- * Metadata for the Ollama LLM model configuration option
- * Rendered as a dropdown when a cached model list is available.
- *
- * @var array
- */
-$_lm = _dokullm_model_choices('ollama', $conf['plugin']['dokullm']['ollama_model'] ?? '');
-$meta['ollama_model'] = $_lm ? array('multichoice', '_choices' => $_lm) : array('string');
-
-/**
- * Metadata for the Ollama embeddings model configuration option
- * Rendered as a dropdown when a cached model list is available.
- *
- * @var array
- */
-$_em = _dokullm_model_choices('ollama_embeddings', $conf['plugin']['dokullm']['ollama_embeddings_model'] ?? '');
-$meta['ollama_embeddings_model'] = $_em ? array('multichoice', '_choices' => $_em) : array('string');
