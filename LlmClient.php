@@ -1248,6 +1248,23 @@ class LlmClient
         return $this->currentText;
     }
 
+    private function extractQueryText($text)
+    {
+        // No headings → user selected a passage, use as-is
+        if (!preg_match('/^={2,}[^=].+[^=]={2,}\s*$/m', $text)) {
+            return $text;
+        }
+        // Full page: split on heading lines and return the last non-empty section
+        $sections = preg_split('/^={2,}[^=].+[^=]={2,}\s*$/m', $text);
+        foreach (array_reverse($sections) as $section) {
+            $trimmed = trim($section);
+            if ($trimmed !== '') {
+                return $trimmed;
+            }
+        }
+        return $text;
+    }
+
     /**
      * Scan text for placeholders
      *
@@ -1296,7 +1313,7 @@ class LlmClient
         }
 
         // Otherwise, get template suggestion for the current text
-        $pageId = $this->queryChromaDBTemplate($this->getCurrentText());
+        $pageId = $this->queryChromaDBTemplate($this->extractQueryText($this->getCurrentText()));
         if (!empty($pageId)) {
             $templateContent = $this->getPageContent($pageId[0]);
             if ($templateContent !== false) {
@@ -1338,7 +1355,7 @@ class LlmClient
         }
 
         // Get example snippets for the current text
-        $snippets = $this->queryChromaDBSnippets($this->getCurrentText(), $count, $where);
+        $snippets = $this->queryChromaDBSnippets($this->extractQueryText($this->getCurrentText()), $count, $where);
         if (!empty($snippets)) {
             $formattedSnippets = [];
             foreach ($snippets as $index => $snippet) {
