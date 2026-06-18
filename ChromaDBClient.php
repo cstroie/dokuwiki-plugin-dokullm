@@ -715,8 +715,9 @@ class ChromaDBClient {
                 }
                 // Create chunk ID
                 $chunkId = $id . '@' . ($index + 1);
-                // Generate embeddings for the chunk
-                $embeddings = $this->generateEmbeddings($paragraph);
+                // Truncate to ~2000 chars before embedding — Ollama context window is limited;
+                // the full text is still stored in ChromaDB for retrieval.
+                $embeddings = $this->generateEmbeddings(mb_substr($paragraph, 0, 2000));
                 // Add chunk-specific metadata
                 $metadata = $baseMetadata;
                 $metadata['chunk_id'] = $chunkId;
