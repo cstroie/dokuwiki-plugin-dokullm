@@ -1129,7 +1129,9 @@ class LlmClient
         // Replace placeholders with actual values
         // Placeholders are in the format {placeholder_name}
         foreach ($variables as $placeholder => $value) {
-            $prompt = str_replace('{' . $placeholder . '}', $value, $prompt);
+            //$prompt = str_replace('{' . $placeholder . '}', $value, $prompt);
+            $replace = is_array($value) ? implode("\n", $value) : (string) $value;
+            $prompt = str_replace('{' . $placeholder . '}', $replace, $prompt);
         }
 
         // Return the processed prompt
