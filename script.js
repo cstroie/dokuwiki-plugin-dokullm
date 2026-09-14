@@ -97,7 +97,15 @@
             dbg('DokuLLM: Editor div not found');
             return;
         }
-        
+
+        // Guard against double initialization (e.g. script injected twice,
+        // or DOMContentLoaded firing more than once via partial page reloads)
+        const existingToolbar = document.getElementById('dokullm-toolbar');
+        if (existingToolbar) {
+            dbg('DokuLLM: Toolbar already present, skipping re-initialization');
+            return;
+        }
+
         dbg('DokuLLM: Creating DokuLLM toolbar');
         // Create toolbar container
         const toolbar = document.createElement('div');

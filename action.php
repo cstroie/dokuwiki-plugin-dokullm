@@ -129,14 +129,10 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
     public function handleMetaHeaders(Doku_Event $event, $param)
     {
         global $ACT;
-        // Add editor JS on edit/preview pages
-        if ($ACT === 'edit' || $ACT === 'preview') {
-            $event->data['script'][] = array(
-                'type' => 'text/javascript',
-                'src' => DOKU_BASE . 'lib/plugins/dokullm/script.js',
-                '_data' => 'dokullm'
-            );
-        }
+        // Note: script.js is automatically included on every page by DokuWiki's
+        // own JS combo loader (any plugin file literally named "script.js" is
+        // auto-bundled), so it must NOT be added here too — doing so loads it
+        // twice and duplicates the toolbar. Only admin.js needs manual injection.
         // Add admin JS on the admin config page
         if ($ACT === 'admin') {
             $event->data['script'][] = array(
