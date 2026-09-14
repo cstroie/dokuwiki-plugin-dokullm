@@ -128,9 +128,9 @@ class action_plugin_dokullm extends DokuWiki_Action_Plugin
      */
     public function handleMetaHeaders(Doku_Event $event, $param)
     {
-        global $INFO, $ACT;
+        global $ACT;
         // Add editor JS on edit/preview pages
-        if ($INFO['act'] == 'edit' || $INFO['act'] == 'preview') {
+        if ($ACT === 'edit' || $ACT === 'preview') {
             $event->data['script'][] = array(
                 'type' => 'text/javascript',
                 'src' => DOKU_BASE . 'lib/plugins/dokullm/script.js',
