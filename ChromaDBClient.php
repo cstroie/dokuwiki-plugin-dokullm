@@ -693,7 +693,9 @@ class ChromaDBClient {
      * 5. Splits the document into chunks (paragraphs)
      * 6. Extracts rich metadata from the DokuWiki ID format
      * 7. Generates embeddings for each chunk
-     * 8. Sends all chunks to ChromaDB with metadata
+     * 8. Deletes any previously indexed chunks for this document, then upserts the
+     *    fresh set — this prevents stale orphaned chunks when paragraph count/order
+     *    changes between sends (upsert alone never removes IDs it isn't given)
      * 
      * Supported ID formats:
      * - Format 1: reports:mri:institution:250620-name-surname (third part is institution name)
@@ -884,6 +886,14 @@ class ChromaDBClient {
                     'message' => "No valid chunks found in file '$id'. Skipping..."
                 ];
             }
+            // Delete any existing chunks for this document before upserting the fresh
+            // ones. Chunk IDs are '{document_id}@{n}', and upsert only overwrites/adds
+            // IDs it's given — if the file now has fewer/renumbered paragraphs than the
+            // previously indexed version, the old extra chunks would otherwise be left
+            // behind as stale orphans. Deleting the full document_id match first
+            // guarantees the collection ends up matching the current file exactly.
+            $deleteEndpoint = "/tenants/{$this->tenant}/databases/{$this->database}/collections/{$collectionId}/delete";
+            $this->makeRequest($deleteEndpoint, 'POST', ['where' => ['document_id' => ['$eq' => $id]]]);
             // Send all chunks to ChromaDB
             $result = $this->addDocuments($collectionName, $chunkContents, $chunkIds, $chunkMetadatas, $chunkEmbeddings);
             return [
