@@ -33,6 +33,7 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
             "Actions:\n" .
             "  send       Send a file or directory to ChromaDB\n" .
             "  delete     Delete a file or directory's entries from ChromaDB\n" .
+            "  prune      Delete ChromaDB entries under a directory/namespace whose files are missing\n" .
             "  query      Query ChromaDB\n" .
             "  heartbeat  Check if ChromaDB server is alive\n" .
             "  list       List all collections\n" .
@@ -48,6 +49,9 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
 
         $options->registerCommand('delete', 'Delete a file, directory, namespace prefix, document ID, or chunk ID\'s entries from ChromaDB');
         $options->registerArgument('path', 'File/directory path, a namespace prefix (trailing / or :), a document ID, or a chunk ID (id@n)', true, 'delete');
+
+        $options->registerCommand('prune', 'Delete ChromaDB entries under a directory/namespace whose files no longer exist on disk');
+        $options->registerArgument('path', 'Directory path or namespace prefix (trailing / or :) to prune orphaned entries from', true, 'prune');
 
         $options->registerCommand('query', 'Query ChromaDB');
         $options->registerOption('collection', 'Collection name to query (default: all collections)', 'c', 'collection', 'query');
@@ -100,6 +104,14 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
                     $this->fatal('Missing file path for delete action');
                 }
                 $this->deleteFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose);
+                break;
+
+            case 'prune':
+                $path = $options->getArgs()[0] ?? null;
+                if (!$path) {
+                    $this->fatal('Missing directory/namespace path for prune action');
+                }
+                $this->pruneFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose);
                 break;
 
             case 'query':
@@ -427,6 +439,85 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         }
         $namespaceId = \dokuwiki\plugin\dokullm\parseFilePath(rtrim($path, '/'));
         return $namespaceId . ':';
+    }
+
+    /**
+     * Convert a DokuWiki-style namespace prefix (e.g. 'reports:mri:2024:') back into
+     * its filesystem directory path under the pages directory, mirroring the path
+     * stripping parseFilePath() does in reverse.
+     */
+    private function idPrefixToDirPath($idPrefix) {
+        $namespace = rtrim($idPrefix, ':');
+        $pagesDir = defined('DOKU_INC') ? DOKU_INC . 'data/pages/' : '/var/www/html/dokuwiki/data/pages/';
+        return $pagesDir . str_replace(':', '/', $namespace);
+    }
+
+    /**
+     * Delete ChromaDB entries under a directory/namespace whose files no longer exist
+     * on disk (orphans), leaving entries with a matching file untouched.
+     *
+     * Accepts either a directory path (e.g. 'reports/mri/2024', with or without a
+     * trailing '/') or a DokuWiki-style namespace prefix (e.g. 'reports:mri:2024:').
+     * The corresponding directory is walked for '.txt' files still present (skipping
+     * '_'-prefixed ones, like 'send'); anything stored in ChromaDB under that
+     * namespace whose derived ID isn't in that set is considered orphaned and deleted.
+     * If the directory doesn't exist at all, every stored entry under the namespace is
+     * treated as orphaned.
+     */
+    private function pruneFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
+        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, $this->getConf('chroma_default_collection', 'documents'), $ollamaHost, $ollamaPort, $ollamaModel);
+
+        $prefix = $this->pathToIdPrefix($path);
+        $dirPath = substr($path, -1) === ':' ? $this->idPrefixToDirPath($path) : rtrim($path, '/');
+
+        $existingIds = [];
+        if (is_dir($dirPath)) {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($dirPath, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::LEAVES_ONLY
+            );
+            foreach ($iterator as $file) {
+                if ($file->isFile() && $file->getExtension() === 'txt' && $file->getFilename()[0] !== '_') {
+                    $existingIds[] = \dokuwiki\plugin\dokullm\parseFilePath($file->getPathname());
+                }
+            }
+        } elseif ($verbose) {
+            $this->info("Directory '$dirPath' does not exist on disk — every stored entry under '$prefix' is an orphan.");
+        }
+
+        $idParts = explode(':', rtrim($prefix, ':'));
+        $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection', 'documents');
+
+        if ($verbose) {
+            $this->info("Pruning orphaned entries under namespace: $prefix (" . count($existingIds) . " file(s) present on disk)");
+        }
+
+        try {
+            $result = $chroma->deleteByPrefix($collectionName, $prefix, $existingIds);
+
+            switch ($result['status']) {
+                case 'success':
+                    $this->success($result['message']);
+                    if ($verbose && !empty($result['details']['document_ids'])) {
+                        foreach ($result['details']['document_ids'] as $id) {
+                            $this->info("  Deleted (orphan): $id");
+                        }
+                    }
+                    break;
+
+                case 'skipped':
+                    if ($verbose) {
+                        $this->info($result['message']);
+                    }
+                    break;
+
+                case 'error':
+                    $this->error($result['message']);
+                    break;
+            }
+        } catch (Exception $e) {
+            $this->error("Error pruning namespace '$prefix' from ChromaDB: " . $e->getMessage());
+        }
     }
 
     /**

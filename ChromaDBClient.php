@@ -371,18 +371,24 @@ class ChromaDBClient {
     }
 
     /**
-     * Delete every document under a namespace prefix from a collection
+     * Delete documents under a namespace prefix from a collection
      *
      * Unlike deleteDocument(), this works even when none of the underlying files still
      * exist on disk: it lists every document ID currently stored in the collection and
      * deletes every one that starts with the given prefix (e.g. 'reports:mri:2024:'),
      * in a single batched delete call.
      *
+     * If $keepIds is non-empty, it's treated as the set of document IDs whose files are
+     * still present on disk (the caller determines this) — those are excluded, so only
+     * orphaned entries (stored in ChromaDB but with no matching file) are deleted. This
+     * is how the CLI's 'prune' command works.
+     *
      * @param string $collectionName The name of the collection to delete from
      * @param string $idPrefix The namespace prefix to match document IDs against (should end with ':')
+     * @param string[] $keepIds Document IDs to exclude from deletion (files still present on disk)
      * @return array Result with status and details
      */
-    public function deleteByPrefix($collectionName, $idPrefix) {
+    public function deleteByPrefix($collectionName, $idPrefix, array $keepIds = []) {
         if (empty($collectionName)) {
             $collectionName = 'documents';
         }
@@ -397,14 +403,16 @@ class ChromaDBClient {
         if (!isset($collection['id'])) {
             return ['status' => 'error', 'message' => "Collection ID not found for '$collectionName'"];
         }
+        $keep = array_flip($keepIds);
         $matched = array_values(array_filter(
             $this->listDocumentIds($collectionName),
-            fn($id) => strpos($id, $idPrefix) === 0
+            fn($id) => strpos($id, $idPrefix) === 0 && !isset($keep[$id])
         ));
+        $scope = empty($keepIds) ? '' : ' orphaned';
         if (empty($matched)) {
             return [
                 'status' => 'skipped',
-                'message' => "No documents found under '$idPrefix' in collection '$collectionName'."
+                'message' => "No{$scope} documents found under '$idPrefix' in collection '$collectionName'."
             ];
         }
         $collectionId = $collection['id'];
@@ -413,7 +421,7 @@ class ChromaDBClient {
         $this->makeRequest($endpoint, 'POST', $data);
         return [
             'status' => 'success',
-            'message' => "Deleted " . count($matched) . " document(s) under '$idPrefix' from collection '$collectionName'",
+            'message' => "Deleted " . count($matched) . "{$scope} document(s) under '$idPrefix' from collection '$collectionName'",
             'details' => [
                 'document_ids' => $matched,
                 'collection' => $collectionName

@@ -18,7 +18,7 @@ DokuLLM is a DokuWiki plugin that integrates Large Language Model (LLM) capabili
 | `action.php` | Main DokuWiki action plugin — event hooks, AJAX routing, template handling, ChromaDB page indexing |
 | `LlmClient.php` | OpenAI-compatible API client — prompt loading, tool calls, ChromaDB queries |
 | `ChromaDBClient.php` | ChromaDB v2 REST client — collection management, Ollama embedding generation, document chunking/indexing |
-| `cli.php` | DokuWiki CLI plugin — batch `send`/`query`/`get`/`list`/`heartbeat`/`identity` commands |
+| `cli.php` | DokuWiki CLI plugin — batch `send`/`delete`/`prune`/`query`/`get`/`list`/`heartbeat` commands |
 | `MenuItem.php` | Page-tools menu item for the "Copy page" button |
 | `script.js` | Frontend toolbar — fetches actions, sends AJAX requests, handles result modes |
 | `style.css` | Toolbar and modal CSS |
@@ -171,6 +171,7 @@ Loop protection:
 ```
 ./bin/plugin.php dokullm send <path>                    # index file or directory into ChromaDB
 ./bin/plugin.php dokullm delete <target>                # remove entries from ChromaDB — see "delete target forms" below
+./bin/plugin.php dokullm prune <dir|namespace>          # delete only ChromaDB entries whose file is missing from disk
 ./bin/plugin.php dokullm query [-c collection] [-l N] [-t type] <search terms>
 ./bin/plugin.php dokullm get <document_id>
 ./bin/plugin.php dokullm list
@@ -195,6 +196,15 @@ Must be run as the web server user (e.g. `sudo -u www-data php ./bin/plugin.php 
 Namespace-prefix deletion works by listing every document ID currently stored in the target collection (`ChromaDBClient::listDocumentIds()`, paginated via the ChromaDB `get` endpoint) and filtering client-side for a prefix match, since ChromaDB's `where` metadata filters have no prefix/`$startswith` operator — only `$eq`/`$ne`/`$in`/`$gt`/etc. The matched IDs are then deleted in one batched call using `where: {document_id: {$in: [...]}}}`. This means it reads the whole collection (not just the namespace) on every call — fine at normal collection sizes, but worth knowing before running it against a very large collection.
 
 In every form, the collection to operate on is derived the same way as `send`: the first colon-segment of the resolved document ID (e.g. `reports:...` → collection `reports`), falling back to `chroma_default_collection`.
+
+### `prune`
+
+`cli.php::pruneFile()` is a surgical version of the namespace-prefix `delete` form: instead of deleting everything under a namespace, it deletes only the ChromaDB entries whose corresponding file is **missing** from disk, leaving entries with a matching file untouched.
+
+- Accepts a directory path (`reports/mri/2024`, with or without a trailing `/`) or a DokuWiki-style namespace prefix (`reports:mri:2024:`).
+- Walks the corresponding directory on disk for `.txt` files still present (same `_`-prefix skip rule as `send`/`delete`), builds the set of document IDs that still have a file, then calls `ChromaDBClient::deleteByPrefix($collection, $prefix, $keepIds)` — the same method the plain namespace `delete` form uses, but with `$keepIds` populated so matching documents are excluded from deletion.
+- If the directory doesn't exist on disk at all, every stored entry under that namespace is treated as orphaned (equivalent to a full namespace `delete`).
+- Use this after individually deleting/renaming pages on disk to clean up ChromaDB without needing to know which specific IDs became stale.
 
 ---
 
