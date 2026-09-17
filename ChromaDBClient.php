@@ -328,6 +328,100 @@ class ChromaDBClient {
     }
 
     /**
+     * List the distinct document IDs stored in a collection
+     *
+     * Paginates through every chunk in the collection (via the 'get' endpoint with no
+     * 'ids' filter) and collects the unique base document IDs from each chunk's
+     * 'document_id' metadata, falling back to stripping the '@{n}' suffix off the
+     * chunk ID itself if that metadata is missing.
+     *
+     * @param string $collectionName The name of the collection to list document IDs from
+     * @return array List of unique document IDs
+     */
+    public function listDocumentIds($collectionName) {
+        if (empty($collectionName)) {
+            $collectionName = 'documents';
+        }
+        try {
+            $collection = $this->getCollection($collectionName);
+        } catch (\Exception $e) {
+            return [];
+        }
+        if (!isset($collection['id'])) {
+            return [];
+        }
+        $collectionId = $collection['id'];
+        $endpoint = "/tenants/{$this->tenant}/databases/{$this->database}/collections/{$collectionId}/get";
+        $documentIds = [];
+        $limit = 1000;
+        $offset = 0;
+        do {
+            $data = ['include' => ['metadatas'], 'limit' => $limit, 'offset' => $offset];
+            $result = $this->makeRequest($endpoint, 'POST', $data);
+            $batchIds = $result['ids'] ?? [];
+            $metadatas = $result['metadatas'] ?? [];
+            foreach ($batchIds as $i => $chunkId) {
+                $documentId = $metadatas[$i]['document_id'] ?? preg_replace('/@\d+$/', '', $chunkId);
+                $documentIds[$documentId] = true;
+            }
+            $batchCount = count($batchIds);
+            $offset += $batchCount;
+        } while ($batchCount === $limit);
+        return array_keys($documentIds);
+    }
+
+    /**
+     * Delete every document under a namespace prefix from a collection
+     *
+     * Unlike deleteDocument(), this works even when none of the underlying files still
+     * exist on disk: it lists every document ID currently stored in the collection and
+     * deletes every one that starts with the given prefix (e.g. 'reports:mri:2024:'),
+     * in a single batched delete call.
+     *
+     * @param string $collectionName The name of the collection to delete from
+     * @param string $idPrefix The namespace prefix to match document IDs against (should end with ':')
+     * @return array Result with status and details
+     */
+    public function deleteByPrefix($collectionName, $idPrefix) {
+        if (empty($collectionName)) {
+            $collectionName = 'documents';
+        }
+        try {
+            $collection = $this->getCollection($collectionName);
+        } catch (\Exception $e) {
+            return [
+                'status' => 'skipped',
+                'message' => "Collection '$collectionName' does not exist. Nothing to delete for '$idPrefix'."
+            ];
+        }
+        if (!isset($collection['id'])) {
+            return ['status' => 'error', 'message' => "Collection ID not found for '$collectionName'"];
+        }
+        $matched = array_values(array_filter(
+            $this->listDocumentIds($collectionName),
+            fn($id) => strpos($id, $idPrefix) === 0
+        ));
+        if (empty($matched)) {
+            return [
+                'status' => 'skipped',
+                'message' => "No documents found under '$idPrefix' in collection '$collectionName'."
+            ];
+        }
+        $collectionId = $collection['id'];
+        $endpoint = "/tenants/{$this->tenant}/databases/{$this->database}/collections/{$collectionId}/delete";
+        $data = ['where' => ['document_id' => ['$in' => $matched]]];
+        $this->makeRequest($endpoint, 'POST', $data);
+        return [
+            'status' => 'success',
+            'message' => "Deleted " . count($matched) . " document(s) under '$idPrefix' from collection '$collectionName'",
+            'details' => [
+                'document_ids' => $matched,
+                'collection' => $collectionName
+            ]
+        ];
+    }
+
+    /**
      * Add documents to a collection
      * 
      * Adds documents to the specified collection. Each document must have a corresponding ID.

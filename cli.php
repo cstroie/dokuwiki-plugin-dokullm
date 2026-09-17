@@ -46,8 +46,8 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         $options->registerCommand('send', 'Send a file or directory to ChromaDB');
         $options->registerArgument('path', 'File or directory path', true, 'send');
 
-        $options->registerCommand('delete', 'Delete a file, directory, document ID, or chunk ID\'s entries from ChromaDB');
-        $options->registerArgument('path', 'File or directory path, a raw DokuWiki document ID, or a chunk ID (id@n)', true, 'delete');
+        $options->registerCommand('delete', 'Delete a file, directory, namespace prefix, document ID, or chunk ID\'s entries from ChromaDB');
+        $options->registerArgument('path', 'File/directory path, a namespace prefix (trailing / or :), a document ID, or a chunk ID (id@n)', true, 'delete');
 
         $options->registerCommand('query', 'Query ChromaDB');
         $options->registerOption('collection', 'Collection name to query (default: all collections)', 'c', 'collection', 'query');
@@ -362,9 +362,10 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
     }
 
     /**
-     * Delete a file, directory, or raw document ID's entries from ChromaDB
+     * Delete a file, directory, namespace prefix, or raw document/chunk ID's entries
+     * from ChromaDB
      *
-     * Accepts either:
+     * Accepts:
      *  - a file/directory path (like 'send') — the DokuWiki ID is derived from the
      *    path, and it does not need to exist on disk for the single-file case, so
      *    entries can be removed for pages that were already deleted locally;
@@ -372,11 +373,24 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
      *    a single chunk/paragraph ID with its '@{n}' suffix (e.g. '...name@3') to
      *    delete just that paragraph — detected by the presence of ':' with no '/'
      *    and no '.txt' extension; ChromaDBClient::deleteDocument() decides whether
-     *    to delete by exact chunk ID or by the whole document's metadata filter.
+     *    to delete by exact chunk ID or by the whole document's metadata filter;
+     *  - a namespace prefix, marked by a trailing '/' (filesystem style, e.g.
+     *    'reports/mri/2024/') or ':' (DokuWiki ID style, e.g. 'reports:mri:2024:') —
+     *    deletes every document under that namespace directly from ChromaDB via
+     *    ChromaDBClient::deleteByPrefix(), which does NOT require the directory or
+     *    any of its files to still exist on disk. This is the only way to clean up
+     *    a namespace whose files have already been removed locally.
      */
     private function deleteFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
         // Create ChromaDB client
         $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, $this->getConf('chroma_default_collection', 'documents'), $ollamaHost, $ollamaPort, $ollamaModel);
+
+        // A trailing '/' or ':' explicitly marks a namespace-prefix delete, which
+        // works regardless of whether the directory/files still exist on disk
+        if (substr($path, -1) === '/' || substr($path, -1) === ':') {
+            $this->deleteByPrefix($this->pathToIdPrefix($path), $chroma, $verbose);
+            return;
+        }
 
         if (is_dir($path)) {
             // Process directory
@@ -403,12 +417,64 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
     }
 
     /**
+     * Convert a filesystem-style directory path or DokuWiki-style namespace into a
+     * normalized ID prefix ending with ':' (e.g. 'reports/mri/2024/' or
+     * 'reports:mri:2024:' both become 'reports:mri:2024:').
+     */
+    private function pathToIdPrefix($path) {
+        if (substr($path, -1) === ':') {
+            return rtrim($path, ':') . ':';
+        }
+        $namespaceId = \dokuwiki\plugin\dokullm\parseFilePath(rtrim($path, '/'));
+        return $namespaceId . ':';
+    }
+
+    /**
      * Delete a single DokuWiki file's entries from ChromaDB
      */
     private function deleteSingleFile($filePath, $chroma, $verbose = false) {
         // Parse file path to extract the document ID (works even if the file no longer exists)
         $id = \dokuwiki\plugin\dokullm\parseFilePath($filePath);
         $this->deleteById($id, $chroma, $verbose);
+    }
+
+    /**
+     * Delete every document under a namespace prefix from ChromaDB
+     */
+    private function deleteByPrefix($idPrefix, $chroma, $verbose = false) {
+        $idParts = explode(':', rtrim($idPrefix, ':'));
+        $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection', 'documents');
+
+        if ($verbose) {
+            $this->info("Deleting all documents under namespace: $idPrefix");
+        }
+
+        try {
+            $result = $chroma->deleteByPrefix($collectionName, $idPrefix);
+
+            switch ($result['status']) {
+                case 'success':
+                    $this->success($result['message']);
+                    if ($verbose && !empty($result['details']['document_ids'])) {
+                        foreach ($result['details']['document_ids'] as $id) {
+                            $this->info("  Deleted: $id");
+                        }
+                    }
+                    break;
+
+                case 'skipped':
+                    if ($verbose) {
+                        $this->info($result['message']);
+                    }
+                    break;
+
+                case 'error':
+                    $this->error($result['message']);
+                    break;
+            }
+        } catch (Exception $e) {
+            $this->error("Error deleting namespace '$idPrefix' from ChromaDB: " . $e->getMessage());
+        }
     }
 
     /**

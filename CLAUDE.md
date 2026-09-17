@@ -169,8 +169,8 @@ Loop protection:
 ## CLI Usage
 
 ```
-./bin/plugin.php dokullm send <path>                     # index file or directory into ChromaDB
-./bin/plugin.php dokullm delete <path|id|id@n>            # remove file, directory, document, or single chunk's entries from ChromaDB
+./bin/plugin.php dokullm send <path>                    # index file or directory into ChromaDB
+./bin/plugin.php dokullm delete <target>                # remove entries from ChromaDB — see "delete target forms" below
 ./bin/plugin.php dokullm query [-c collection] [-l N] [-t type] <search terms>
 ./bin/plugin.php dokullm get <document_id>
 ./bin/plugin.php dokullm list
@@ -179,6 +179,22 @@ Loop protection:
 ```
 
 Must be run as the web server user (e.g. `sudo -u www-data php ./bin/plugin.php dokullm ...`) because ChromaDB client reads DokuWiki config which requires proper file permissions.
+
+### `delete` target forms
+
+`cli.php::deleteFile()` inspects the shape of `<target>` and picks one of four strategies. The first three call `ChromaDBClient::deleteDocument()`; the fourth calls `ChromaDBClient::deleteByPrefix()`.
+
+| Target form | Example | Effect |
+|---|---|---|
+| Directory path (exists on disk) | `reports/mri/2024` | Walks `.txt` files in the directory (skipping `_`-prefixed ones, like `send`), deletes each file's document by ID |
+| File path | `reports/mri/2024/g287-name-surname.txt` | Deletes that one document's chunks. Does **not** require the file to still exist — the ID is derived from the path string alone |
+| Raw document ID | `reports:mri:2024:g287-name-surname` | Deletes every chunk of that document, via a `document_id` metadata filter (`$eq`) |
+| Chunk ID (`id@n` suffix) | `reports:mri:2024:g287-name-surname@3` | Deletes only that one paragraph/chunk, via an exact-ID delete (not a metadata filter — `@n` never matches `document_id`) |
+| Namespace prefix (trailing `/` or `:`) | `reports/mri/2024/` or `reports:mri:2024:` | Deletes **every** document whose ID starts with that namespace, regardless of whether any of the underlying files exist on disk. This is the only delete form that doesn't require local files — use it to clean up a namespace after its files were already removed |
+
+Namespace-prefix deletion works by listing every document ID currently stored in the target collection (`ChromaDBClient::listDocumentIds()`, paginated via the ChromaDB `get` endpoint) and filtering client-side for a prefix match, since ChromaDB's `where` metadata filters have no prefix/`$startswith` operator — only `$eq`/`$ne`/`$in`/`$gt`/etc. The matched IDs are then deleted in one batched call using `where: {document_id: {$in: [...]}}}`. This means it reads the whole collection (not just the namespace) on every call — fine at normal collection sizes, but worth knowing before running it against a very large collection.
+
+In every form, the collection to operate on is derived the same way as `send`: the first colon-segment of the resolved document ID (e.g. `reports:...` → collection `reports`), falling back to `chroma_default_collection`.
 
 ---
 
