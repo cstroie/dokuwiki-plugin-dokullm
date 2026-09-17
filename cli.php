@@ -46,8 +46,8 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         $options->registerCommand('send', 'Send a file or directory to ChromaDB');
         $options->registerArgument('path', 'File or directory path', true, 'send');
 
-        $options->registerCommand('delete', 'Delete a file or directory\'s entries from ChromaDB');
-        $options->registerArgument('path', 'File or directory path', true, 'delete');
+        $options->registerCommand('delete', 'Delete a file, directory, or document ID\'s entries from ChromaDB');
+        $options->registerArgument('path', 'File or directory path, or a raw DokuWiki document ID', true, 'delete');
 
         $options->registerCommand('query', 'Query ChromaDB');
         $options->registerOption('collection', 'Collection name to query (default: all collections)', 'c', 'collection', 'query');
@@ -362,11 +362,14 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
     }
 
     /**
-     * Delete a file or directory's entries from ChromaDB
+     * Delete a file, directory, or raw document ID's entries from ChromaDB
      *
-     * Unlike sendFile(), this does not require the path to exist on disk for the
-     * single-file case: the DokuWiki ID is derived purely from the path string, so
-     * entries can be removed for pages that were already deleted locally.
+     * Accepts either:
+     *  - a file/directory path (like 'send') — the DokuWiki ID is derived from the
+     *    path, and it does not need to exist on disk for the single-file case, so
+     *    entries can be removed for pages that were already deleted locally;
+     *  - a raw DokuWiki document ID (e.g. 'reports:mri:2024:g287-name-surname'),
+     *    detected by the presence of ':' with no '/' and no '.txt' extension.
      */
     private function deleteFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
         // Create ChromaDB client
@@ -375,18 +378,25 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         if (is_dir($path)) {
             // Process directory
             $this->deleteDirectory($path, $chroma, $verbose);
-        } else {
-            // Skip files that start with underscore
-            $filename = basename($path);
-            if ($filename !== '' && $filename[0] === '_') {
-                if ($verbose) {
-                    $this->info("Skipping file (starts with underscore): $path");
-                }
-                return;
-            }
-
-            $this->deleteSingleFile($path, $chroma, $verbose);
+            return;
         }
+
+        // Treat as a raw DokuWiki document ID if it looks like one rather than a path
+        if (strpos($path, ':') !== false && strpos($path, '/') === false && !preg_match('/\.txt$/', $path)) {
+            $this->deleteById($path, $chroma, $verbose);
+            return;
+        }
+
+        // Skip files that start with underscore
+        $filename = basename($path);
+        if ($filename !== '' && $filename[0] === '_') {
+            if ($verbose) {
+                $this->info("Skipping file (starts with underscore): $path");
+            }
+            return;
+        }
+
+        $this->deleteSingleFile($path, $chroma, $verbose);
     }
 
     /**
@@ -395,7 +405,13 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
     private function deleteSingleFile($filePath, $chroma, $verbose = false) {
         // Parse file path to extract the document ID (works even if the file no longer exists)
         $id = \dokuwiki\plugin\dokullm\parseFilePath($filePath);
+        $this->deleteById($id, $chroma, $verbose);
+    }
 
+    /**
+     * Delete a document (by its DokuWiki ID) from ChromaDB
+     */
+    private function deleteById($id, $chroma, $verbose = false) {
         // Use the first part of the document ID as collection name, fallback to configured default
         $idParts = explode(':', $id);
         $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection', 'documents');
