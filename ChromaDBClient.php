@@ -278,15 +278,17 @@ class ChromaDBClient {
     }
 
     /**
-     * Delete a document (all its chunks) from a collection
+     * Delete a document or a single chunk from a collection
      *
-     * Deletes every chunk belonging to the given document ID by filtering on the
-     * 'document_id' metadata field, since chunks are stored as '{document_id}@{n}'
-     * and the exact chunk count/suffixes aren't known ahead of time.
+     * If $documentId contains an '@{n}' chunk suffix (e.g. 'reports:...:name@3'), only
+     * that exact chunk is deleted, via ChromaDB's ids-based delete. Otherwise every
+     * chunk belonging to the document is deleted by filtering on the 'document_id'
+     * metadata field, since chunks are stored as '{document_id}@{n}' and the exact
+     * chunk count/suffixes aren't known ahead of time.
      * See: https://docs.trychroma.com/docs/collections/delete-data
      *
      * @param string $collectionName The name of the collection to delete from
-     * @param string $documentId The base document ID to delete (without chunk suffixes)
+     * @param string $documentId The document ID to delete, optionally with an '@{n}' chunk suffix
      * @return array Result with status and details
      */
     public function deleteDocument($collectionName, $documentId) {
@@ -308,11 +310,16 @@ class ChromaDBClient {
         }
         $collectionId = $collection['id'];
         $endpoint = "/tenants/{$this->tenant}/databases/{$this->database}/collections/{$collectionId}/delete";
-        $data = ['where' => ['document_id' => ['$eq' => $documentId]]];
+        // A chunk ID (has an '@{n}' suffix) is deleted by exact ID; a bare document ID
+        // is deleted by matching every chunk whose 'document_id' metadata equals it.
+        $isChunk = strpos($documentId, '@') !== false;
+        $data = $isChunk
+            ? ['ids' => [$documentId]]
+            : ['where' => ['document_id' => ['$eq' => $documentId]]];
         $this->makeRequest($endpoint, 'POST', $data);
         return [
             'status' => 'success',
-            'message' => "Deleted document '$documentId' from collection '$collectionName'",
+            'message' => ($isChunk ? "Deleted chunk '$documentId'" : "Deleted document '$documentId'") . " from collection '$collectionName'",
             'details' => [
                 'document_id' => $documentId,
                 'collection' => $collectionName

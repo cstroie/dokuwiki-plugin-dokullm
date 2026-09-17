@@ -46,8 +46,8 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         $options->registerCommand('send', 'Send a file or directory to ChromaDB');
         $options->registerArgument('path', 'File or directory path', true, 'send');
 
-        $options->registerCommand('delete', 'Delete a file, directory, or document ID\'s entries from ChromaDB');
-        $options->registerArgument('path', 'File or directory path, or a raw DokuWiki document ID', true, 'delete');
+        $options->registerCommand('delete', 'Delete a file, directory, document ID, or chunk ID\'s entries from ChromaDB');
+        $options->registerArgument('path', 'File or directory path, a raw DokuWiki document ID, or a chunk ID (id@n)', true, 'delete');
 
         $options->registerCommand('query', 'Query ChromaDB');
         $options->registerOption('collection', 'Collection name to query (default: all collections)', 'c', 'collection', 'query');
@@ -368,8 +368,11 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
      *  - a file/directory path (like 'send') — the DokuWiki ID is derived from the
      *    path, and it does not need to exist on disk for the single-file case, so
      *    entries can be removed for pages that were already deleted locally;
-     *  - a raw DokuWiki document ID (e.g. 'reports:mri:2024:g287-name-surname'),
-     *    detected by the presence of ':' with no '/' and no '.txt' extension.
+     *  - a raw DokuWiki document ID (e.g. 'reports:mri:2024:g287-name-surname'), or
+     *    a single chunk/paragraph ID with its '@{n}' suffix (e.g. '...name@3') to
+     *    delete just that paragraph — detected by the presence of ':' with no '/'
+     *    and no '.txt' extension; ChromaDBClient::deleteDocument() decides whether
+     *    to delete by exact chunk ID or by the whole document's metadata filter.
      */
     private function deleteFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
         // Create ChromaDB client

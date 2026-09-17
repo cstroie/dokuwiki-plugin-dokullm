@@ -170,7 +170,7 @@ Loop protection:
 
 ```
 ./bin/plugin.php dokullm send <path>                     # index file or directory into ChromaDB
-./bin/plugin.php dokullm delete <path|id>                # remove file, directory, or document ID's entries from ChromaDB
+./bin/plugin.php dokullm delete <path|id|id@n>            # remove file, directory, document, or single chunk's entries from ChromaDB
 ./bin/plugin.php dokullm query [-c collection] [-l N] [-t type] <search terms>
 ./bin/plugin.php dokullm get <document_id>
 ./bin/plugin.php dokullm list
