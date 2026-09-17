@@ -278,6 +278,49 @@ class ChromaDBClient {
     }
 
     /**
+     * Delete a document (all its chunks) from a collection
+     *
+     * Deletes every chunk belonging to the given document ID by filtering on the
+     * 'document_id' metadata field, since chunks are stored as '{document_id}@{n}'
+     * and the exact chunk count/suffixes aren't known ahead of time.
+     * See: https://docs.trychroma.com/docs/collections/delete-data
+     *
+     * @param string $collectionName The name of the collection to delete from
+     * @param string $documentId The base document ID to delete (without chunk suffixes)
+     * @return array Result with status and details
+     */
+    public function deleteDocument($collectionName, $documentId) {
+        // Use provided name, fallback to 'documents' if empty
+        if (empty($collectionName)) {
+            $collectionName = 'documents';
+        }
+        // First get the collection to find its ID
+        try {
+            $collection = $this->getCollection($collectionName);
+        } catch (\Exception $e) {
+            return [
+                'status' => 'skipped',
+                'message' => "Collection '$collectionName' does not exist. Nothing to delete for '$documentId'."
+            ];
+        }
+        if (!isset($collection['id'])) {
+            return ['status' => 'error', 'message' => "Collection ID not found for '$collectionName'"];
+        }
+        $collectionId = $collection['id'];
+        $endpoint = "/tenants/{$this->tenant}/databases/{$this->database}/collections/{$collectionId}/delete";
+        $data = ['where' => ['document_id' => ['$eq' => $documentId]]];
+        $this->makeRequest($endpoint, 'POST', $data);
+        return [
+            'status' => 'success',
+            'message' => "Deleted document '$documentId' from collection '$collectionName'",
+            'details' => [
+                'document_id' => $documentId,
+                'collection' => $collectionName
+            ]
+        ];
+    }
+
+    /**
      * Add documents to a collection
      * 
      * Adds documents to the specified collection. Each document must have a corresponding ID.

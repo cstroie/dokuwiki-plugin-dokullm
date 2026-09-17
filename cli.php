@@ -32,6 +32,7 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
             "Usage: ./bin/plugin.php dokullm [action] [options]\n\n" .
             "Actions:\n" .
             "  send       Send a file or directory to ChromaDB\n" .
+            "  delete     Delete a file or directory's entries from ChromaDB\n" .
             "  query      Query ChromaDB\n" .
             "  heartbeat  Check if ChromaDB server is alive\n" .
             "  list       List all collections\n" .
@@ -44,6 +45,9 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
         // Action-specific options
         $options->registerCommand('send', 'Send a file or directory to ChromaDB');
         $options->registerArgument('path', 'File or directory path', true, 'send');
+
+        $options->registerCommand('delete', 'Delete a file or directory\'s entries from ChromaDB');
+        $options->registerArgument('path', 'File or directory path', true, 'delete');
 
         $options->registerCommand('query', 'Query ChromaDB');
         $options->registerOption('collection', 'Collection name to query (default: all collections)', 'c', 'collection', 'query');
@@ -88,6 +92,14 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
                     $this->fatal('Missing file path for send action');
                 }
                 $this->sendFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose);
+                break;
+
+            case 'delete':
+                $path = $options->getArgs()[0] ?? null;
+                if (!$path) {
+                    $this->fatal('Missing file path for delete action');
+                }
+                $this->deleteFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose);
                 break;
 
             case 'query':
@@ -346,6 +358,119 @@ class cli_plugin_dokullm extends DokuWiki_CLI_Plugin {
                     $this->info("  Errors: $errorCount files");
                 }
             }
+        }
+    }
+
+    /**
+     * Delete a file or directory's entries from ChromaDB
+     *
+     * Unlike sendFile(), this does not require the path to exist on disk for the
+     * single-file case: the DokuWiki ID is derived purely from the path string, so
+     * entries can be removed for pages that were already deleted locally.
+     */
+    private function deleteFile($path, $host, $port, $tenant, $database, $ollamaHost, $ollamaPort, $ollamaModel, $verbose = false) {
+        // Create ChromaDB client
+        $chroma = new \dokuwiki\plugin\dokullm\ChromaDBClient($host, $port, $tenant, $database, $this->getConf('chroma_default_collection', 'documents'), $ollamaHost, $ollamaPort, $ollamaModel);
+
+        if (is_dir($path)) {
+            // Process directory
+            $this->deleteDirectory($path, $chroma, $verbose);
+        } else {
+            // Skip files that start with underscore
+            $filename = basename($path);
+            if ($filename !== '' && $filename[0] === '_') {
+                if ($verbose) {
+                    $this->info("Skipping file (starts with underscore): $path");
+                }
+                return;
+            }
+
+            $this->deleteSingleFile($path, $chroma, $verbose);
+        }
+    }
+
+    /**
+     * Delete a single DokuWiki file's entries from ChromaDB
+     */
+    private function deleteSingleFile($filePath, $chroma, $verbose = false) {
+        // Parse file path to extract the document ID (works even if the file no longer exists)
+        $id = \dokuwiki\plugin\dokullm\parseFilePath($filePath);
+
+        // Use the first part of the document ID as collection name, fallback to configured default
+        $idParts = explode(':', $id);
+        $collectionName = isset($idParts[0]) && !empty($idParts[0]) ? $idParts[0] : $this->getConf('chroma_default_collection', 'documents');
+
+        try {
+            $result = $chroma->deleteDocument($collectionName, $id);
+
+            switch ($result['status']) {
+                case 'success':
+                    $this->success("Deleted from ChromaDB: $id");
+                    if ($verbose) {
+                        $this->info("  Collection: $collectionName");
+                    }
+                    break;
+
+                case 'skipped':
+                    if ($verbose) {
+                        $this->info($result['message']);
+                    }
+                    break;
+
+                case 'error':
+                    $this->error($result['message']);
+                    break;
+            }
+        } catch (Exception $e) {
+            $this->error("Error deleting '$id' from ChromaDB: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Delete all DokuWiki files in a directory from ChromaDB
+     */
+    private function deleteDirectory($dirPath, $chroma, $verbose = false) {
+        if ($verbose) {
+            $this->info("Deleting entries for directory: $dirPath");
+        }
+
+        // Check if directory exists
+        if (!is_dir($dirPath)) {
+            $this->error("Directory does not exist: $dirPath");
+            return;
+        }
+
+        // Create RecursiveIteratorIterator to process directories recursively
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($dirPath, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY
+        );
+
+        $files = [];
+        foreach ($iterator as $file) {
+            // Process only .txt files that don't start with underscore
+            if ($file->isFile() && $file->getExtension() === 'txt' && $file->getFilename()[0] !== '_') {
+                $files[] = $file->getPathname();
+            }
+        }
+
+        // Skip if no files
+        if (empty($files)) {
+            if ($verbose) {
+                $this->info("No .txt files found in directory: $dirPath");
+            }
+            return;
+        }
+
+        if ($verbose) {
+            $this->info("Found " . count($files) . " files to process.");
+        }
+
+        foreach ($files as $file) {
+            if ($verbose) {
+                $this->info("\nProcessing file: $file");
+            }
+            $this->deleteSingleFile($file, $chroma, $verbose);
         }
     }
 
